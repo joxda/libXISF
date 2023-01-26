@@ -12,6 +12,14 @@
 
 #define STRING_ENUM(e) {#e, e}
 
+template<> struct std::hash<QString>
+{
+    size_t operator()(const QString &string) const
+    {
+        return std::hash<std::string>{}(string.toStdString());
+    }
+};
+
 namespace LibXISF
 {
 
@@ -677,9 +685,8 @@ void XISFWriter::writeMetadata()
     _xml->writeEndElement();
 }
 
-#define REGISTER_METATYPE(type) qRegisterMetaType<type>("LibXISF::"#type); \
-    typeToId.insert({#type, QMetaType::fromType<type>().id()}); \
-    idToType.insert({QMetaType::fromType<type>().id(), #type})
+#define REGISTER_METATYPE(type) { int id = qRegisterMetaType<type>("LibXISF::"#type); \
+    typeToId.insert({#type, id}); idToType.insert({id, #type}); }
 
 struct TypesInit
 {

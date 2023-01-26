@@ -47,6 +47,8 @@ int main(int argc, char **argv)
             image.properties.push_back(Property("PropertyFloat64", (Float64) 0.64));
             image.properties.push_back(Property("PropertyComplex32", Complex32{3.0, -2.0}));
             image.properties.push_back(Property("PropertyComplex64", Complex64{-3.0, 2.0}));
+            image.fitsKeywords.push_back({"RA", "226.9751163116387", "Right ascension of the center of the image (deg)"});
+            image.fitsKeywords.push_back({"DEC", "62.02302376908295", "Declination of the center of the image (deg)"});
             writer.writeImage(image);
 
             image.imageType = Image::Flat;

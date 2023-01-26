@@ -410,6 +410,8 @@ void XISFReader::readImageElement()
         {
             if(_xml->name() == "Property")
                 image.properties.push_back(readPropertyElement());
+            else if(_xml->name() == "FITSKeyword")
+                image.fitsKeywords.push_back(readFITSKeyword());
             else if(_xml->name() == "ICCProfile")
             {
                 DataBlock icc = readDataBlock();
@@ -440,6 +442,15 @@ Property XISFReader::readPropertyElement()
     property.value = value;
 
     return property;
+}
+
+FITSKeyword XISFReader::readFITSKeyword()
+{
+    QXmlStreamAttributes attributes = _xml->attributes();
+    if(attributes.hasAttribute("name") && attributes.hasAttribute("value") && attributes.hasAttribute("comment"))
+        return { attributes.value("name").toString(), attributes.value("value").toString(), attributes.value("comment").toString() };
+    else
+        throw Error("Invalid FITSKeyword element");
 }
 
 void XISFReader::readDataElement(DataBlock &dataBlock)
@@ -552,15 +563,6 @@ void XISFWriter::save(QIODevice &io)
     }
 }
 
-void XISFWriter::saveXML(const QString &name)
-{
-    QFile fw(name);
-    fw.open(QIODevice::WriteOnly);
-    QByteArray header = _xisfHeader.mid(16);
-    header.truncate(header.indexOf('\0'));
-    fw.write(header);
-}
-
 void XISFWriter::writeImage(const Image &image)
 {
     _images.push_back(image);
@@ -633,6 +635,9 @@ void XISFWriter::writeImageElement(const Image &image)
     for(auto &property : image.properties)
         writePropertyElement(property);
 
+    for(auto &fitsKeyword : image.fitsKeywords)
+        writeFITSKeyword(fitsKeyword);
+
     _xml->writeEndElement();
 }
 
@@ -701,6 +706,16 @@ void XISFWriter::writePropertyElement(const Property &property)
     _xml->writeEndElement();
     if(_xml->hasError())
         throw Error("Failed to write property");
+}
+
+void XISFWriter::writeFITSKeyword(const FITSKeyword &keyword)
+{
+    _xml->writeEmptyElement("FITSKeyword");
+    _xml->writeAttribute("name", keyword.name);
+    _xml->writeAttribute("value", keyword.value);
+    _xml->writeAttribute("comment", keyword.comment);
+    if(_xml->hasError())
+        throw Error("Failed to write FITS keyword");
 }
 
 void XISFWriter::writeMetadata()

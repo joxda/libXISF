@@ -66,6 +66,13 @@ struct Property
         value(QVariant::fromValue<T>(_value)){}
 };
 
+struct FITSKeyword
+{
+    QString name;
+    QString value;
+    QString comment;
+};
+
 struct Image
 {
     enum Type
@@ -119,6 +126,7 @@ struct Image
     DataBlock dataBlock;
     QByteArray iccProfile;
     std::vector<Property> properties;
+    std::vector<FITSKeyword> fitsKeywords;
 
     void convertPixelStorageTo(PixelStorage storage);
 
@@ -138,7 +146,7 @@ public:
     XISFReader();
     void open(const QString &name);
     void open(const QByteArray &data);
-    /** Open image from */
+    /** Open image from QIODevice. This method takes ownership of *io pointer */
     void open(QIODevice *io);
     void close();
     int imagesCount() const;
@@ -148,6 +156,7 @@ private:
     void readSignature();
     void readImageElement();
     Property readPropertyElement();
+    FITSKeyword readFITSKeyword();
     void readDataElement(DataBlock &dataBlock);
     DataBlock readDataBlock();
     void readCompression(DataBlock &dataBlock);
@@ -165,7 +174,6 @@ public:
     void save(const QString &name);
     void save(QByteArray &data);
     void save(QIODevice &io);
-    void saveXML(const QString &name);
     void writeImage(const Image &image);
 private:
     void writeHeader();
@@ -173,6 +181,7 @@ private:
     void writeDataBlockAttributes(const DataBlock &dataBlock);
     void writeCompressionAttributes(const DataBlock &dataBlock);
     void writePropertyElement(const Property &property);
+    void writeFITSKeyword(const FITSKeyword &keyword);
     void writeMetadata();
     std::unique_ptr<QXmlStreamWriter> _xml;
     QByteArray _xisfHeader;

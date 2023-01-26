@@ -18,17 +18,15 @@
 
 #include "libxisf.h"
 #include <unordered_map>
+#include <unordered_set>
 #include <QXmlStreamReader>
 #include <QDateTime>
 #include <QtEndian>
 #include <QElapsedTimer>
 #include <QFile>
 #include <QBuffer>
-#include <QDebug>
 #include "lz4/lz4.h"
 #include "lz4/lz4hc.h"
-
-#define STRING_ENUM(e) {#e, e}
 
 #if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
 template<> struct std::hash<QString>
@@ -43,8 +41,14 @@ template<> struct std::hash<QString>
 namespace LibXISF
 {
 
-static std::unordered_map<const char*, int> typeToId;
-static std::unordered_map<int, const char*> idToType;
+static std::unordered_map<QString, int> typeToId;
+static std::unordered_map<int, QString> idToType;
+static std::unordered_map<QString, Image::Type> imageTypeToEnum;
+static std::unordered_map<Image::Type, QString> imageTypeToString;
+static std::unordered_map<QString, Image::SampleFormat> sampleFormatToEnum;
+static std::unordered_map<Image::SampleFormat, QString> sampleFormatToString;
+static std::unordered_map<QString, Image::ColorSpace> colorSpaceToEnum;
+static std::unordered_map<Image::ColorSpace, QString> colorSpaceToString;
 
 static void byteShuffle(QByteArray &data, int itemSize)
 {
@@ -84,16 +88,9 @@ static void byteUnshuffle(QByteArray &data, int itemSize)
     }
 }
 
-QString sampleFormatToString(Image::SampleFormat format)
+bool isString(QMetaType::Type type)
 {
-    static QStringList sampleFormats = {"UInt8", "UInt16", "UInt32", "UInt64", "Float32", "Float64", "Complex32", "Complex64"};
-    return sampleFormats[format];
-}
-
-QString colorSpaceToString(Image::ColorSpace colorSpace)
-{
-    static QStringList colorSpaces = {"Gray", "RGB", "CIELab"};
-    return colorSpaces[colorSpace];
+    return type == QMetaType::QString;
 }
 
 void DataBlock::decompress(const QByteArray &input, const QString &encoding)
@@ -122,7 +119,7 @@ void DataBlock::decompress(const QByteArray &input, const QString &encoding)
     case LZ4HC:
         data.resize(uncompressedSize);
         if(LZ4_decompress_safe(tmp.constData(), data.data(), tmp.size(), data.size()) < 0)
-            throw std::runtime_error("LZ4 decompression failed");
+            throw Error("LZ4 decompression failed");
         break;
     }
 
@@ -157,12 +154,18 @@ void DataBlock::compress()
             compSize = LZ4_compress_HC(tmp.constData(), data.data(), tmp.size(), data.size(), LZ4HC_CLEVEL_DEFAULT);
 
         if(compSize <= 0)
-            throw std::runtime_error("LZ4 compression failed");
+            throw Error("LZ4 compression failed");
 
         data.resize(compSize);
         break;
     }
     }
+}
+
+Property::Property(const QString &_id, const char *_value) :
+    id(_id),
+    value(_value)
+{
 }
 
 template<typename T>
@@ -187,8 +190,11 @@ void normalToPlanar(void *_in, void *_out, size_t channels, size_t size)
 
 void Image::convertPixelStorageTo(PixelStorage storage)
 {
-    if(pixelStorage == storage)
+    if(pixelStorage == storage || channelCount <= 1)
+    {
+        pixelStorage = storage;
         return;
+    }
 
     QByteArray tmp;
     tmp.resize(dataBlock.data.size());
@@ -231,22 +237,14 @@ void Image::convertPixelStorageTo(PixelStorage storage)
 
 Image::Type Image::imageTypeEnum(const QString &type)
 {
-    static const std::unordered_map<QString, Image::Type> imageTypeMap = {STRING_ENUM(Bias),
-                                                                          STRING_ENUM(Dark),
-                                                                          STRING_ENUM(Flat),
-                                                                          STRING_ENUM(Light),
-                                                                          STRING_ENUM(MasterBias),
-                                                                          STRING_ENUM(MasterDark),
-                                                                          STRING_ENUM(MasterFlat),
-                                                                          STRING_ENUM(DefectMap),
-                                                                          STRING_ENUM(RejectionMapHigh),
-                                                                          STRING_ENUM(RejectionMapLow),
-                                                                          STRING_ENUM(BinaryRejectionMapHigh),
-                                                                          STRING_ENUM(BinaryRejectionMapLow),
-                                                                          STRING_ENUM(SlopeMap),
-                                                                          STRING_ENUM(WeightMap});
-    auto t = imageTypeMap.find(type);
-    return t != imageTypeMap.end() ? t->second : Image::Light;
+    auto t = imageTypeToEnum.find(type);
+    return t != imageTypeToEnum.end() ? t->second : Image::Light;
+}
+
+QString Image::imageTypeString(Type type)
+{
+    auto t = imageTypeToString.find(type);
+    return t != imageTypeToString.end() ? t->second : "Light";
 }
 
 Image::PixelStorage Image::pixelStorageEnum(const QString &storage)
@@ -255,25 +253,34 @@ Image::PixelStorage Image::pixelStorageEnum(const QString &storage)
     return Image::Planar;
 }
 
+QString Image::pixelStorageString(PixelStorage storage)
+{
+    if(storage == Normal)return "Normal";
+    return "Planar";
+}
+
 Image::SampleFormat Image::sampleFormatEnum(const QString &format)
 {
-    static const std::unordered_map<QString, SampleFormat> sampleFormatMap = {STRING_ENUM(UInt8),
-                                                                              STRING_ENUM(UInt16),
-                                                                              STRING_ENUM(UInt32),
-                                                                              STRING_ENUM(UInt64),
-                                                                              STRING_ENUM(Float32),
-                                                                              STRING_ENUM(Float64),
-                                                                              STRING_ENUM(Complex32),
-                                                                              STRING_ENUM(Complex64)};
-    auto t = sampleFormatMap.find(format);
-    return t != sampleFormatMap.end() ? t->second : Image::UInt16;
+    auto t = sampleFormatToEnum.find(format);
+    return t != sampleFormatToEnum.end() ? t->second : Image::UInt16;
+}
+
+QString Image::sampleFormatString(SampleFormat format)
+{
+    auto t = sampleFormatToString.find(format);
+    return t != sampleFormatToString.end() ? t->second : "UInt16";
 }
 
 Image::ColorSpace Image::colorSpaceEnum(const QString &colorSpace)
 {
-    static const std::unordered_map<QString, ColorSpace> colorSpaceMap = { STRING_ENUM(Gray), STRING_ENUM(RGB), STRING_ENUM(CIELab) };
-    auto t = colorSpaceMap.find(colorSpace);
-    return t != colorSpaceMap.end() ? t->second : Image::Gray;
+    auto t = colorSpaceToEnum.find(colorSpace);
+    return t != colorSpaceToEnum.end() ? t->second : Image::Gray;
+}
+
+QString Image::colorSpaceString(ColorSpace colorSpace)
+{
+    auto t = colorSpaceToString.find(colorSpace);
+    return t != colorSpaceToString.end() ? t->second : "Gray";
 }
 
 XISFReader::XISFReader()
@@ -299,7 +306,7 @@ void XISFReader::open(QIODevice *io)
     close();
     _io.reset(io);
     if(!_io->open(QIODevice::ReadOnly))
-        throw std::runtime_error("Failed to open file");
+        throw Error("Failed to open file");
 
     readSignature();
     readXISFHeader();
@@ -321,7 +328,7 @@ int XISFReader::imagesCount() const
 const Image& XISFReader::getImage(uint32_t n)
 {
     if(n >= _images.size())
-        throw std::runtime_error("Out of bounds");
+        throw Error("Out of bounds");
 
     Image &img = _images[n];
     if(img.dataBlock.attachmentPos)
@@ -355,20 +362,20 @@ void XISFReader::readXISFHeader()
                 _properties.push_back(readPropertyElement());
         }
     }
-    else throw std::runtime_error("Unknown root XML element");
+    else throw Error("Unknown root XML element");
 
     if(_xml->hasError())
-        throw std::runtime_error(_xml->errorString().toStdString());
+        throw Error(_xml->errorString().toStdString());
 }
 
 void XISFReader::readSignature()
 {
     char signature[8];
     if(_io->read(signature, sizeof(signature)) != sizeof(signature))
-        throw std::runtime_error("Failed to read from file");
+        throw Error("Failed to read from file");
 
     if(memcmp(signature, "XISF0100", sizeof(signature)) != 0)
-        throw std::runtime_error("Not valid XISF 1.0 file");
+        throw Error("Not valid XISF 1.0 file");
 }
 
 void XISFReader::readImageElement()
@@ -378,11 +385,11 @@ void XISFReader::readImageElement()
     Image image;
 
     QVector<QStringRef> geometry = attributes.value("geometry").split(":");
-    if(geometry.size() != 3)throw std::runtime_error("We support only 2D images");
+    if(geometry.size() != 3)throw Error("We support only 2D images");
     image.width = geometry[0].toULongLong();
     image.height = geometry[1].toULongLong();
     image.channelCount = geometry[2].toULongLong();
-    if(!image.width || !image.height || !image.channelCount)throw std::runtime_error("Invalid image geometry");
+    if(!image.width || !image.height || !image.channelCount)throw Error("Invalid image geometry");
 
     QVector<QStringRef> bounds = attributes.value("bounds").split(":");
     if(bounds.size() == 2)
@@ -403,8 +410,6 @@ void XISFReader::readImageElement()
         {
             if(_xml->name() == "Property")
                 image.properties.push_back(readPropertyElement());
-            else if(image.dataBlock.embedded && _xml->name() == "Data")
-                readDataElement(image.dataBlock);
             else if(_xml->name() == "ICCProfile")
             {
                 DataBlock icc = readDataBlock();
@@ -426,53 +431,29 @@ Property XISFReader::readPropertyElement()
     property.format = attributes.value("format").toString();
     property.comment = attributes.value("comment").toString();
 
-    QStringRef type = attributes.value("type");
-    QStringRef value = attributes.value("value");
-    if(type == "Int8")
-        property.value.setValue((Int8)value.toInt());
-    else if(type == "Int16")
-        property.value.setValue((Int16)value.toInt());
-    else if(type == "Int32")
-        property.value.setValue((Int32)value.toInt());
-    else if(type == "Int64")
-        property.value.setValue((Int64)value.toLongLong());
-    else if(type == "UInt8")
-        property.value.setValue((Int8)value.toInt());
-    else if(type == "UInt16")
-        property.value.setValue((Int16)value.toInt());
-    else if(type == "UInt32")
-        property.value.setValue<UInt32>(value.toUInt());
-    else if(type == "UInt64")
-        property.value.setValue<UInt64>(value.toULongLong());
-    else if(type == "Float32")
-        property.value = value.toFloat();
-    else if(type == "Float64")
-        property.value = value.toDouble();
-    else if(type == "TimePoint")
-        property.value = QDateTime::fromString(value.toString(), Qt::ISODate);
-    else if(type == "String")
-    {
-        if(attributes.hasAttribute("location"))
-        {
-            DataBlock dataBlock = readDataBlock();
-            if(dataBlock.embedded)
-                readDataElement(dataBlock);
-            property.value = QString::fromUtf8(dataBlock.data);
-        }
-        else
-            property.value = _xml->readElementText();
-    }
-    else
-        property.value = value.toString();
+    QString type = attributes.value("type").toString();
+    if(typeToId.count(type) == 0)
+        throw Error("Invalid type in property");
 
-    qDebug() << property.id << type << property.value.typeName() << property.value;
+    QVariant value = attributes.value("value").toString();
+    value.convert(typeToId[type]);
+    property.value = value;
 
     return property;
 }
 
 void XISFReader::readDataElement(DataBlock &dataBlock)
 {
-    readCompression(dataBlock);
+    _xml->readNextStartElement();
+    if(_xml->name() == "Data")
+    {
+        readCompression(dataBlock);
+        QString encoding = _xml->attributes().value("encoding").toString();
+        QByteArray text = _xml->readElementText().toUtf8();
+        dataBlock.decompress(text, encoding);
+    }
+    else
+        throw Error("Unexpected XML element");
 }
 
 DataBlock XISFReader::readDataBlock()
@@ -497,12 +478,15 @@ DataBlock XISFReader::readDataBlock()
         bool ok1, ok2;
         dataBlock.attachmentPos = location[1].toULongLong(&ok1);
         dataBlock.attachmentSize = location[2].toULongLong(&ok2);
-        if(!ok1 || !ok2)throw std::runtime_error("Invalid attachment");
+        if(!ok1 || !ok2)throw Error("Invalid attachment");
     }
     else
     {
-        throw std::runtime_error("Invalid data block");
+        throw Error("Invalid data block");
     }
+
+    if(dataBlock.embedded)
+        readDataElement(dataBlock);
 
     return dataBlock;
 }
@@ -519,7 +503,7 @@ void XISFReader::readCompression(DataBlock &dataBlock)
         else if(compression[0].startsWith("lz4"))
             dataBlock.codec = DataBlock::LZ4;
         else
-            throw std::runtime_error("Unknown compression codec");
+            throw Error("Unknown compression codec");
 
         dataBlock.uncompressedSize = compression[1].toULongLong();
 
@@ -528,7 +512,7 @@ void XISFReader::readCompression(DataBlock &dataBlock)
             if(compression.size() == 3)
                 dataBlock.byteShuffling = compression[2].toInt();
             else
-                throw std::runtime_error("Missing byte shuffling size");
+                throw Error("Missing byte shuffling size");
         }
     }
 }
@@ -536,6 +520,7 @@ void XISFReader::readCompression(DataBlock &dataBlock)
 XISFWriter::XISFWriter()
 {
     _xml = std::make_unique<QXmlStreamWriter>();
+    _xml->setAutoFormatting(true);
 }
 
 void XISFWriter::save(const QString &name)
@@ -543,7 +528,7 @@ void XISFWriter::save(const QString &name)
     QFile fw(name);
 
     if(!fw.open(QIODevice::WriteOnly))
-        throw std::runtime_error("Failed to open file");
+        throw Error("Failed to open file");
 
     save(fw);
 }
@@ -565,6 +550,15 @@ void XISFWriter::save(QIODevice &io)
     {
         io.write(image.dataBlock.data);
     }
+}
+
+void XISFWriter::saveXML(const QString &name)
+{
+    QFile fw(name);
+    fw.open(QIODevice::WriteOnly);
+    QByteArray header = _xisfHeader.mid(16);
+    header.truncate(header.indexOf('\0'));
+    fw.write(header);
 }
 
 void XISFWriter::writeImage(const Image &image)
@@ -599,29 +593,42 @@ void XISFWriter::writeHeader()
     writeMetadata();
 
     _xml->writeEndElement();
+    _xml->writeEndDocument();
 
     uint32_t size = _xisfHeader.size();
-    QByteArray blockPos = QByteArray::number(size);
-    _xisfHeader.replace("#########", blockPos);
+
+    uint32_t offset = 0;
+    const char replace[] = "attachment:2147483648";
+    for(auto &image : _images)
+    {
+        QByteArray blockPos = QByteArray("attachment:") + QByteArray::number(size + offset);
+        _xisfHeader.replace(_xisfHeader.indexOf(replace), sizeof(replace) - 1, blockPos);
+        offset += image.dataBlock.data.size();
+    }
+
     uint32_t headerSize = _xisfHeader.size() - sizeof(signature);
     _xisfHeader.append(size - _xisfHeader.size(), '\0');
-
 
     buffer.seek(8);
     buffer.write((char*)&headerSize, sizeof(size));
 
-    _xml->writeEndDocument();
-
     if(_xml->hasError())
-        throw std::runtime_error("Failed to write XML header");
+        throw Error("Failed to write XML header");
 }
 
 void XISFWriter::writeImageElement(const Image &image)
 {
     _xml->writeStartElement("Image");
     _xml->writeAttribute("geometry", QString("%1:%2:%3").arg(image.width).arg(image.height).arg(image.channelCount));
-    _xml->writeAttribute("sampleFormat", sampleFormatToString(image.sampleFormat));
-    _xml->writeAttribute("colorSpace", colorSpaceToString(image.colorSpace));
+    _xml->writeAttribute("sampleFormat", Image::sampleFormatString(image.sampleFormat));
+    _xml->writeAttribute("colorSpace", Image::colorSpaceString(image.colorSpace));
+    _xml->writeAttribute("imageType", Image::imageTypeString(image.imageType));
+    if((image.sampleFormat == Image::Float32 || image.sampleFormat == Image::Float64) ||
+            image.bounds[0] != 0.0 || image.bounds[1] != 1.0)
+    {
+        _xml->writeAttribute("bounds", QString("%1:%2").arg(image.bounds[0]));
+    }
+
     writeDataBlockAttributes(image.dataBlock);
     for(auto &property : image.properties)
         writePropertyElement(property);
@@ -643,7 +650,7 @@ void XISFWriter::writeDataBlockAttributes(const DataBlock &dataBlock)
     }
     else
     {
-        _xml->writeAttribute("location", QString("attachment:#########:%1").arg(dataBlock.data.size()));
+        _xml->writeAttribute("location", QString("attachment:2147483648:%1").arg(dataBlock.data.size()));
     }
 }
 
@@ -673,9 +680,11 @@ void XISFWriter::writeCompressionAttributes(const DataBlock &dataBlock)
 
 void XISFWriter::writePropertyElement(const Property &property)
 {
+    int type = property.value.userType();
+
     _xml->writeStartElement("Property");
     _xml->writeAttribute("id", property.id);
-    _xml->writeAttribute("type", idToType[property.value.type()]);
+    _xml->writeAttribute("type", idToType[type]);
 
     if(!property.format.isEmpty())
         _xml->writeAttribute("format", property.format);
@@ -683,34 +692,34 @@ void XISFWriter::writePropertyElement(const Property &property)
     if(!property.comment.isEmpty())
         _xml->writeAttribute("comment", property.comment);
 
-    if((QMetaType::Type)property.value.type() == QMetaType::QString)
+    if(type == QMetaType::QString)
         _xml->writeCharacters(property.value.toString());
+    else if(type == QMetaType::SChar || type == QMetaType::UChar)
+        _xml->writeAttribute("value", QString::number(property.value.toInt()));
     else
         _xml->writeAttribute("value", property.value.toString());
     _xml->writeEndElement();
+    if(_xml->hasError())
+        throw Error("Failed to write property");
 }
 
 void XISFWriter::writeMetadata()
 {
     _xml->writeStartElement("Metadata");
-
-    writePropertyElement({"XISF:CreationTime", QDateTime::currentDateTimeUtc().toString(Qt::ISODate), QString(), QString()});
-
-    _xml->writeStartElement("Property");
-    _xml->writeAttribute("id", "XISF:CreatorApplication");
-    _xml->writeAttribute("type", "String");
-    _xml->writeCharacters("LibXISF");
-    _xml->writeEndElement();
-
+    writePropertyElement(Property("XISF:CreationTime", QDateTime::currentDateTimeUtc().toString(Qt::ISODate)));
+    writePropertyElement(Property("XISF:CreatorApplication", "LibXISF"));
     _xml->writeEndElement();
 }
 
 #define REGISTER_METATYPE(type) { int id = qRegisterMetaType<type>("LibXISF::"#type); \
     typeToId.insert({#type, id}); idToType.insert({id, #type}); }
 
-struct TypesInit
+#define STRING_ENUM(map, map2, c, e) { map.insert({#e, c::e}); map2.insert({c::e, #e}); }
+//#define ENUM_STRING(e) {#e, e}
+
+struct Init
 {
-    TypesInit()
+    Init()
     {
         REGISTER_METATYPE(Boolean);
         REGISTER_METATYPE(Int8);
@@ -751,6 +760,34 @@ struct TypesInit
         REGISTER_METATYPE(C64Matrix);
         REGISTER_METATYPE(String);
 
+        STRING_ENUM(imageTypeToEnum, imageTypeToString, Image, Bias);
+        STRING_ENUM(imageTypeToEnum, imageTypeToString, Image, Dark);
+        STRING_ENUM(imageTypeToEnum, imageTypeToString, Image, Flat);
+        STRING_ENUM(imageTypeToEnum, imageTypeToString, Image, Light);
+        STRING_ENUM(imageTypeToEnum, imageTypeToString, Image, MasterBias);
+        STRING_ENUM(imageTypeToEnum, imageTypeToString, Image, MasterDark);
+        STRING_ENUM(imageTypeToEnum, imageTypeToString, Image, MasterFlat);
+        STRING_ENUM(imageTypeToEnum, imageTypeToString, Image, DefectMap);
+        STRING_ENUM(imageTypeToEnum, imageTypeToString, Image, RejectionMapHigh);
+        STRING_ENUM(imageTypeToEnum, imageTypeToString, Image, RejectionMapLow);
+        STRING_ENUM(imageTypeToEnum, imageTypeToString, Image, BinaryRejectionMapHigh);
+        STRING_ENUM(imageTypeToEnum, imageTypeToString, Image, BinaryRejectionMapLow);
+        STRING_ENUM(imageTypeToEnum, imageTypeToString, Image, SlopeMap);
+        STRING_ENUM(imageTypeToEnum, imageTypeToString, Image, WeightMap);
+
+        STRING_ENUM(sampleFormatToEnum, sampleFormatToString, Image, UInt8);
+        STRING_ENUM(sampleFormatToEnum, sampleFormatToString, Image, UInt16);
+        STRING_ENUM(sampleFormatToEnum, sampleFormatToString, Image, UInt32);
+        STRING_ENUM(sampleFormatToEnum, sampleFormatToString, Image, UInt64);
+        STRING_ENUM(sampleFormatToEnum, sampleFormatToString, Image, Float32);
+        STRING_ENUM(sampleFormatToEnum, sampleFormatToString, Image, Float64);
+        STRING_ENUM(sampleFormatToEnum, sampleFormatToString, Image, Complex32);
+        STRING_ENUM(sampleFormatToEnum, sampleFormatToString, Image, Complex64);
+
+        STRING_ENUM(colorSpaceToEnum, colorSpaceToString, Image, Gray);
+        STRING_ENUM(colorSpaceToEnum, colorSpaceToString, Image, RGB);
+        STRING_ENUM(colorSpaceToEnum, colorSpaceToString, Image, CIELab);
+
         QMetaType::registerConverter<Complex32, QString>([](const Complex32 &c){ return QString("(%1,%2)").arg(c.real).arg(c.imag); });
         QMetaType::registerConverter<Complex64, QString>([](const Complex64 &c){ return QString("(%1,%2)").arg(c.real).arg(c.imag); });
         QMetaType::registerConverter<QString, Complex32>([](QString s)
@@ -776,6 +813,6 @@ struct TypesInit
     }
 };
 
-static TypesInit typesInit;
+static Init init;
 
 }

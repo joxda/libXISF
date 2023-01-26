@@ -56,6 +56,14 @@ struct Property
     QVariant value;
     QString comment;
     QString format;
+
+    Property() = default;
+    Property(const Property &) = default;
+    Property(const QString &_id, const char *_value);
+    template<typename T>
+    Property(const QString &_id, const T& _value) :
+        id(_id),
+        value(QVariant::fromValue<T>(_value)){}
 };
 
 struct Image
@@ -102,7 +110,7 @@ struct Image
 
     uint64_t width = 0;
     uint64_t height = 0;
-    uint64_t channelCount = 0;
+    uint64_t channelCount = 1;
     double bounds[2] = {0.0, 1.0};
     Type imageType = Light;
     PixelStorage pixelStorage = Planar;
@@ -115,9 +123,13 @@ struct Image
     void convertPixelStorageTo(PixelStorage storage);
 
     static Type imageTypeEnum(const QString &type);
+    static QString imageTypeString(Type type);
     static PixelStorage pixelStorageEnum(const QString &storage);
+    static QString pixelStorageString(PixelStorage storage);
     static SampleFormat sampleFormatEnum(const QString &format);
+    static QString sampleFormatString(SampleFormat format);
     static ColorSpace colorSpaceEnum(const QString &colorSpace);
+    static QString colorSpaceString(ColorSpace colorSpace);
 };
 
 class LIBXISF_EXPORT XISFReader
@@ -126,6 +138,7 @@ public:
     XISFReader();
     void open(const QString &name);
     void open(const QByteArray &data);
+    /** Open image from */
     void open(QIODevice *io);
     void close();
     int imagesCount() const;
@@ -152,6 +165,7 @@ public:
     void save(const QString &name);
     void save(QByteArray &data);
     void save(QIODevice &io);
+    void saveXML(const QString &name);
     void writeImage(const Image &image);
 private:
     void writeHeader();
@@ -224,9 +238,17 @@ typedef Matrix<Complex32> C32Matrix;
 typedef Matrix<Complex64> C64Matrix;
 typedef QString String;
 
-}
+class LIBXISF_EXPORT Error : public std::exception
+{
+    std::string _msg;
+public:
+    Error() = default;
+    explicit Error(const char *msg) : Error(std::string(msg)) {}
+    explicit Error(const std::string &msg) : std::exception(), _msg(msg) {}
+    const char* what() const noexcept { return _msg.c_str(); }
+};
 
-QDebug operator<<(QDebug dbg, const LibXISF::Complex32 &c);
+}
 
 Q_DECLARE_METATYPE(LibXISF::Boolean);
 Q_DECLARE_METATYPE(LibXISF::Int8);

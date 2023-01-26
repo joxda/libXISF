@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.14)
 
-project(libXISF LANGUAGES CXX)
+project(libXISF VERSION 0.1.0 LANGUAGES CXX C)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(CMAKE_AUTOUIC ON)
@@ -22,8 +22,24 @@ add_library(XISF SHARED
   lz4/lz4hc.h
 )
 
-target_link_libraries(XISF PRIVATE Qt${QT_VERSION_MAJOR}::Core)
+target_link_libraries(XISF PUBLIC Qt${QT_VERSION_MAJOR}::Core)
 
 target_compile_definitions(XISF PRIVATE LIBXISF_LIBRARY)
 
 set_target_properties(XISF PROPERTIES PUBLIC_HEADER libxisf.h)
+
+include(GNUInstallDirs)
+
+install(TARGETS XISF PUBLIC_HEADER)
+
+#testing
+
+enable_testing()
+
+add_executable(LibXISFTest test/main.cpp)
+
+target_link_libraries(LibXISFTest XISF)
+
+add_test(NAME LibXISFTest        COMMAND LibXISFTest)
+add_test(NAME LibXISFTestRead    COMMAND LibXISFTest "${CMAKE_CURRENT_LIST_DIR}/test/test.xisf")
+add_test(NAME LibXISFTestReadLZ4 COMMAND LibXISFTest "${CMAKE_CURRENT_LIST_DIR}/test/test_lz4.xisf")

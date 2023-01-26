@@ -30,6 +30,7 @@
 
 #define STRING_ENUM(e) {#e, e}
 
+#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
 template<> struct std::hash<QString>
 {
     size_t operator()(const QString &string) const
@@ -37,6 +38,7 @@ template<> struct std::hash<QString>
         return std::hash<std::string>{}(string.toStdString());
     }
 };
+#endif
 
 namespace LibXISF
 {

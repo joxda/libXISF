@@ -36,7 +36,9 @@ install(TARGETS XISF PUBLIC_HEADER)
 
 enable_testing()
 
-add_executable(LibXISFTest test/main.cpp)
+add_executable(LibXISFTest
+    test/main.cpp
+    test/benchmark.cpp)
 
 target_link_libraries(LibXISFTest XISF)
 

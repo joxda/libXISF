@@ -21,6 +21,8 @@
 
 using namespace LibXISF;
 
+void benchmark();
+
 #define TEST(cond, msg) if(cond){ std::cerr << msg << std::endl; return 1; }
 
 int main(int argc, char **argv)
@@ -67,6 +69,10 @@ int main(int argc, char **argv)
             TEST(image.properties.size() != img0.properties.size(), "Property count doesn't match");
             TEST(image.dataBlock.data != img0.dataBlock.data, "Images doesn't match");
             TEST(img0.dataBlock.data != img1.dataBlock.data, "Images doesn't match");
+        }
+        else if(argc == 2 && argv[1] == QString("bench"))
+        {
+            benchmark();
         }
         else
         {

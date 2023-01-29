@@ -188,51 +188,189 @@ void normalToPlanar(void *_in, void *_out, size_t channels, size_t size)
             out[o*size + i] = in[i*channels + o];
 }
 
+Image::Image(uint64_t width, uint64_t height, uint64_t channelCount, SampleFormat sampleFormat, ColorSpace colorSpace, PixelStorage pixelStorate) :
+    _pixelStorage(pixelStorate),
+    _sampleFormat(sampleFormat),
+    _colorSpace(colorSpace)
+{
+    setGeometry(width, height, channelCount);
+}
+
+uint64_t Image::width() const
+{
+    return _width;
+}
+
+uint64_t Image::height() const
+{
+    return _height;
+}
+
+uint64_t Image::channelCount() const
+{
+    return _channelCount;
+}
+
+void Image::setGeometry(uint64_t width, uint64_t height, uint64_t channelCount)
+{
+    _width = width;
+    _height = height;
+    _channelCount = channelCount;
+    _dataBlock.data.resize(width * height * channelCount * sampleFormatSize(_sampleFormat));
+}
+
+const Bounds &Image::bounds() const
+{
+    return _bounds;
+}
+
+void Image::setBounds(const Bounds &newBounds)
+{
+    _bounds = newBounds;
+}
+
+Image::Type Image::imageType() const
+{
+    return _imageType;
+}
+
+void Image::setImageType(Type newImageType)
+{
+    _imageType = newImageType;
+}
+
+Image::PixelStorage Image::pixelStorage() const
+{
+    return _pixelStorage;
+}
+
+void Image::setPixelStorage(PixelStorage newPixelStorage)
+{
+    _pixelStorage = newPixelStorage;
+}
+
+Image::SampleFormat Image::sampleFormat() const
+{
+    return _sampleFormat;
+}
+
+void Image::setSampleFormat(SampleFormat newSampleFormat)
+{
+    _sampleFormat = newSampleFormat;
+    _dataBlock.data.resize(_width * _height * _channelCount * sampleFormatSize(_sampleFormat));
+}
+
+Image::ColorSpace Image::colorSpace() const
+{
+    return _colorSpace;
+}
+
+void Image::setColorSpace(ColorSpace newColorSpace)
+{
+    _colorSpace = newColorSpace;
+}
+
+const std::vector<Property>& Image::imageProperties() const
+{
+    return _properties;
+}
+
+void Image::addProperty(const Property &property)
+{
+    for(auto &p : _properties)
+    {
+        if(p.id == property.id)
+            throw Error("Duplicate property id");
+    }
+    _properties.push_back(property);
+}
+
+const std::vector<FITSKeyword> Image::fitsKeywords() const
+{
+    return _fitsKeywords;
+}
+
+void Image::addFITSKeyword(const FITSKeyword &keyword)
+{
+    _fitsKeywords.push_back(keyword);
+}
+
+void *Image::imageData()
+{
+    return _dataBlock.data.data();
+}
+
+size_t Image::imageDataSize() const
+{
+    return _dataBlock.data.size();
+}
+
+DataBlock::CompressionCodec Image::compression() const
+{
+    return _dataBlock.codec;
+}
+
+void Image::setCompression(DataBlock::CompressionCodec compression, int level)
+{
+    _dataBlock.codec = compression;
+    _dataBlock.compressLevel = level;
+}
+
+bool Image::byteShuffling() const
+{
+    return _dataBlock.byteShuffling;
+}
+
+void Image::setByteshuffling(bool enable)
+{
+    _dataBlock.byteShuffling = enable ? sampleFormatSize(_sampleFormat) : 0;
+}
+
 void Image::convertPixelStorageTo(PixelStorage storage)
 {
-    if(pixelStorage == storage || channelCount <= 1)
+    if(_pixelStorage == storage || _channelCount <= 1)
     {
-        pixelStorage = storage;
+        _pixelStorage = storage;
         return;
     }
 
     QByteArray tmp;
-    tmp.resize(dataBlock.data.size());
-    size_t size = width*height;
+    tmp.resize(_dataBlock.data.size());
+    size_t size = _width*_height;
 
-    switch(sampleFormat)
+    switch(_sampleFormat)
     {
     case UInt8:
         if(storage == Normal)
-            planarToNormal<uint8_t>(dataBlock.data.data(), tmp.data(), channelCount, size);
+            planarToNormal<uint8_t>(_dataBlock.data.data(), tmp.data(), _channelCount, size);
         else
-            normalToPlanar<uint8_t>(dataBlock.data.data(), tmp.data(), channelCount, size);
+            normalToPlanar<uint8_t>(_dataBlock.data.data(), tmp.data(), _channelCount, size);
         break;
     case UInt16:
         if(storage == Normal)
-            planarToNormal<uint16_t>(dataBlock.data.data(), tmp.data(), channelCount, size);
+            planarToNormal<uint16_t>(_dataBlock.data.data(), tmp.data(), _channelCount, size);
         else
-            normalToPlanar<uint16_t>(dataBlock.data.data(), tmp.data(), channelCount, size);
+            normalToPlanar<uint16_t>(_dataBlock.data.data(), tmp.data(), _channelCount, size);
         break;
     case UInt32:
     case Float32:
         if(storage == Normal)
-            planarToNormal<uint32_t>(dataBlock.data.data(), tmp.data(), channelCount, size);
+            planarToNormal<uint32_t>(_dataBlock.data.data(), tmp.data(), _channelCount, size);
         else
-            normalToPlanar<uint32_t>(dataBlock.data.data(), tmp.data(), channelCount, size);
+            normalToPlanar<uint32_t>(_dataBlock.data.data(), tmp.data(), _channelCount, size);
         break;
     case UInt64:
     case Float64:
         if(storage == Normal)
-            planarToNormal<uint64_t>(dataBlock.data.data(), tmp.data(), channelCount, size);
+            planarToNormal<uint64_t>(_dataBlock.data.data(), tmp.data(), _channelCount, size);
         else
-            normalToPlanar<uint64_t>(dataBlock.data.data(), tmp.data(), channelCount, size);
+            normalToPlanar<uint64_t>(_dataBlock.data.data(), tmp.data(), _channelCount, size);
         break;
     default:
         break;
     }
-    dataBlock.data = tmp;
-    pixelStorage = storage;
+    _dataBlock.data = tmp;
+    _pixelStorage = storage;
 }
 
 Image::Type Image::imageTypeEnum(const QString &type)
@@ -283,6 +421,22 @@ QString Image::colorSpaceString(ColorSpace colorSpace)
     return t != colorSpaceToString.end() ? t->second : "Gray";
 }
 
+size_t Image::sampleFormatSize(SampleFormat sampleFormat)
+{
+    switch(sampleFormat)
+    {
+        case Image::UInt8:   return sizeof(UInt8);
+        case Image::UInt16:  return sizeof(UInt16);
+        case Image::UInt32:  return sizeof(UInt32);
+        case Image::UInt64:  return sizeof(UInt64);
+        case Image::Float32: return sizeof(Float32);
+        case Image::Float64: return sizeof(Float64);
+        case Image::Complex32: return sizeof(Complex32);
+        case Image::Complex64: return sizeof(Complex64);
+    }
+    return UInt16;
+}
+
 XISFReader::XISFReader()
 {
     _xml = std::make_unique<QXmlStreamReader>();
@@ -331,10 +485,10 @@ const Image& XISFReader::getImage(uint32_t n)
         throw Error("Out of bounds");
 
     Image &img = _images[n];
-    if(img.dataBlock.attachmentPos)
+    if(img._dataBlock.attachmentPos)
     {
-        _io->seek(img.dataBlock.attachmentPos);
-        img.dataBlock.decompress(_io->read(img.dataBlock.attachmentSize));
+        _io->seek(img._dataBlock.attachmentPos);
+        img._dataBlock.decompress(_io->read(img._dataBlock.attachmentSize));
     }
     return img;
 }
@@ -386,40 +540,42 @@ void XISFReader::readImageElement()
 
     QVector<QStringRef> geometry = attributes.value("geometry").split(":");
     if(geometry.size() != 3)throw Error("We support only 2D images");
-    image.width = geometry[0].toULongLong();
-    image.height = geometry[1].toULongLong();
-    image.channelCount = geometry[2].toULongLong();
-    if(!image.width || !image.height || !image.channelCount)throw Error("Invalid image geometry");
+    image._width = geometry[0].toULongLong();
+    image._height = geometry[1].toULongLong();
+    image._channelCount = geometry[2].toULongLong();
+    if(!image._width || !image._height || !image._channelCount)throw Error("Invalid image geometry");
 
     QVector<QStringRef> bounds = attributes.value("bounds").split(":");
     if(bounds.size() == 2)
     {
-        image.bounds[0] = bounds[0].toDouble();
-        image.bounds[1] = bounds[1].toDouble();
+        image._bounds.first = bounds[0].toDouble();
+        image._bounds.second = bounds[1].toDouble();
     }
-    image.imageType = Image::imageTypeEnum(attributes.value("imageType").toString());
-    image.pixelStorage = Image::pixelStorageEnum(attributes.value("pixelStorage").toString());
-    image.sampleFormat = Image::sampleFormatEnum(attributes.value("sampleFormat").toString());
-    image.colorSpace = Image::colorSpaceEnum(attributes.value("colorSpace").toString());
+    image._imageType = Image::imageTypeEnum(attributes.value("imageType").toString());
+    image._pixelStorage = Image::pixelStorageEnum(attributes.value("pixelStorage").toString());
+    image._sampleFormat = Image::sampleFormatEnum(attributes.value("sampleFormat").toString());
+    image._colorSpace = Image::colorSpaceEnum(attributes.value("colorSpace").toString());
 
-    image.dataBlock = readDataBlock();
+    image._dataBlock = readDataBlock();
 
     while(_xml->readNext() != QXmlStreamReader::EndElement || _xml->name() != "Image")
     {
         if(_xml->tokenType() == QXmlStreamReader::StartElement)
         {
             if(_xml->name() == "Property")
-                image.properties.push_back(readPropertyElement());
+                image._properties.push_back(readPropertyElement());
             else if(_xml->name() == "FITSKeyword")
-                image.fitsKeywords.push_back(readFITSKeyword());
+                image._fitsKeywords.push_back(readFITSKeyword());
             else if(_xml->name() == "ICCProfile")
             {
                 DataBlock icc = readDataBlock();
-                image.iccProfile = icc.data;
+                image._iccProfile = icc.data;
             }
             else
                 _xml->skipCurrentElement();
         }
+        if(_xml->hasError())
+            throw Error("Error while reading XISF header");
     }
 
     _images.push_back(std::move(image));
@@ -430,16 +586,36 @@ Property XISFReader::readPropertyElement()
     QXmlStreamAttributes attributes = _xml->attributes();
     Property property;
     property.id = attributes.value("id").toString();
-    property.format = attributes.value("format").toString();
     property.comment = attributes.value("comment").toString();
 
     QString type = attributes.value("type").toString();
     if(typeToId.count(type) == 0)
         throw Error("Invalid type in property");
 
-    QVariant value = attributes.value("value").toString();
-    value.convert(typeToId[type]);
-    property.value = value;
+    QVariant value;
+
+    if(type == "String")
+    {
+        property.value = _xml->readElementText();
+    }
+    else if(attributes.hasAttribute("value"))
+    {
+        value = attributes.value("value").toString();
+        value.convert(typeToId[type]);
+        property.value = value;
+    }
+    else
+    {
+        //TODO properly handle data block properties
+        throw Error("Data block properties not supported");
+        /*DataBlock dataBlock = readDataBlock();
+        if(dataBlock.attachmentPos)
+        {
+            _io->seek(dataBlock.attachmentPos);
+            dataBlock.decompress(_io->read(dataBlock.attachmentSize));
+        }
+        property.value = dataBlock.data;*/
+    }
 
     return property;
 }
@@ -531,7 +707,7 @@ void XISFReader::readCompression(DataBlock &dataBlock)
 XISFWriter::XISFWriter()
 {
     _xml = std::make_unique<QXmlStreamWriter>();
-    _xml->setAutoFormatting(true);
+    //_xml->setAutoFormatting(true);
 }
 
 void XISFWriter::save(const QString &name)
@@ -559,15 +735,15 @@ void XISFWriter::save(QIODevice &io)
 
     for(auto &image : _images)
     {
-        io.write(image.dataBlock.data);
+        io.write(image._dataBlock.data);
     }
 }
 
 void XISFWriter::writeImage(const Image &image)
 {
     _images.push_back(image);
-    _images.back().dataBlock.attachmentPos = 1;
-    _images.back().dataBlock.compress();
+    _images.back()._dataBlock.attachmentPos = 1;
+    _images.back()._dataBlock.compress();
 }
 
 void XISFWriter::writeHeader()
@@ -605,7 +781,7 @@ void XISFWriter::writeHeader()
     {
         QByteArray blockPos = QByteArray("attachment:") + QByteArray::number(size + offset);
         _xisfHeader.replace(_xisfHeader.indexOf(replace), sizeof(replace) - 1, blockPos);
-        offset += image.dataBlock.data.size();
+        offset += image._dataBlock.data.size();
     }
 
     uint32_t headerSize = _xisfHeader.size() - sizeof(signature);
@@ -621,21 +797,21 @@ void XISFWriter::writeHeader()
 void XISFWriter::writeImageElement(const Image &image)
 {
     _xml->writeStartElement("Image");
-    _xml->writeAttribute("geometry", QString("%1:%2:%3").arg(image.width).arg(image.height).arg(image.channelCount));
-    _xml->writeAttribute("sampleFormat", Image::sampleFormatString(image.sampleFormat));
-    _xml->writeAttribute("colorSpace", Image::colorSpaceString(image.colorSpace));
-    _xml->writeAttribute("imageType", Image::imageTypeString(image.imageType));
-    if((image.sampleFormat == Image::Float32 || image.sampleFormat == Image::Float64) ||
-            image.bounds[0] != 0.0 || image.bounds[1] != 1.0)
+    _xml->writeAttribute("geometry", QString("%1:%2:%3").arg(image._width).arg(image._height).arg(image._channelCount));
+    _xml->writeAttribute("sampleFormat", Image::sampleFormatString(image._sampleFormat));
+    _xml->writeAttribute("colorSpace", Image::colorSpaceString(image._colorSpace));
+    _xml->writeAttribute("imageType", Image::imageTypeString(image._imageType));
+    if((image._sampleFormat == Image::Float32 || image._sampleFormat == Image::Float64) ||
+            image._bounds.first != 0.0 || image._bounds.second != 1.0)
     {
-        _xml->writeAttribute("bounds", QString("%1:%2").arg(image.bounds[0]));
+        _xml->writeAttribute("bounds", QString("%1:%2").arg(image._bounds.first).arg(image._bounds.second));
     }
 
-    writeDataBlockAttributes(image.dataBlock);
-    for(auto &property : image.properties)
+    writeDataBlockAttributes(image._dataBlock);
+    for(auto &property : image._properties)
         writePropertyElement(property);
 
-    for(auto &fitsKeyword : image.fitsKeywords)
+    for(auto &fitsKeyword : image._fitsKeywords)
         writeFITSKeyword(fitsKeyword);
 
     _xml->writeEndElement();
@@ -690,9 +866,6 @@ void XISFWriter::writePropertyElement(const Property &property)
     _xml->writeStartElement("Property");
     _xml->writeAttribute("id", property.id);
     _xml->writeAttribute("type", idToType[type]);
-
-    if(!property.format.isEmpty())
-        _xml->writeAttribute("format", property.format);
 
     if(!property.comment.isEmpty())
         _xml->writeAttribute("comment", property.comment);

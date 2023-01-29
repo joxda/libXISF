@@ -45,17 +45,17 @@ struct DataBlock
     uint64_t attachmentSize = 0;
     uint64_t uncompressedSize = 0;
     CompressionCodec codec = None;
+    int compressLevel = -1;
     QByteArray data;
     void decompress(const QByteArray &input, const QString &encoding = "");
     void compress();
 };
 
-struct Property
+struct LIBXISF_EXPORT Property
 {
     QString id;
     QVariant value;
     QString comment;
-    QString format;
 
     Property() = default;
     Property(const Property &) = default;
@@ -66,15 +66,18 @@ struct Property
         value(QVariant::fromValue<T>(_value)){}
 };
 
-struct FITSKeyword
+struct LIBXISF_EXPORT FITSKeyword
 {
     QString name;
     QString value;
     QString comment;
 };
 
-struct Image
+typedef std::pair<double, double> Bounds;
+
+class LIBXISF_EXPORT Image
 {
+public:
     enum Type
     {
         Bias,
@@ -92,6 +95,9 @@ struct Image
         SlopeMap,
         WeightMap
     };
+    /**
+    Planar - each channel samples are stored separately for example RGB image will be stored RRRRGGGGBBBB
+    Normal - channel values for each pixel are stored inteleaved RGBRGBRGBRGB */
     enum PixelStorage
     {
         Planar,
@@ -114,20 +120,38 @@ struct Image
         RGB,
         CIELab
     };
+    Image() = default;
+    Image(uint64_t width, uint64_t height, uint64_t channelCount = 1, SampleFormat sampleFormat = UInt16, ColorSpace colorSpace = Gray, PixelStorage pixelStorate = Planar);
 
-    uint64_t width = 0;
-    uint64_t height = 0;
-    uint64_t channelCount = 1;
-    double bounds[2] = {0.0, 1.0};
-    Type imageType = Light;
-    PixelStorage pixelStorage = Planar;
-    SampleFormat sampleFormat = UInt16;
-    ColorSpace colorSpace = Gray;
-    DataBlock dataBlock;
-    QByteArray iccProfile;
-    std::vector<Property> properties;
-    std::vector<FITSKeyword> fitsKeywords;
+    uint64_t width() const;
+    uint64_t height() const;
+    uint64_t channelCount() const;
+    void setGeometry(uint64_t width, uint64_t height, uint64_t channelCount);
+    const Bounds &bounds() const;
+    void setBounds(const Bounds &newBounds);
+    Type imageType() const;
+    void setImageType(Type newImageType);
+    PixelStorage pixelStorage() const;
+    void setPixelStorage(PixelStorage newPixelStorage);
+    SampleFormat sampleFormat() const;
+    void setSampleFormat(SampleFormat newSampleFormat);
+    ColorSpace colorSpace() const;
+    void setColorSpace(ColorSpace newColorSpace);
+    const std::vector<Property> &imageProperties() const;
+    void addProperty(const Property &property);
+    const std::vector<FITSKeyword> fitsKeywords() const;
+    void addFITSKeyword(const FITSKeyword &keyword);
 
+    void* imageData();
+    template<typename T>
+    T* imageData(){ return static_cast<T*>(imageData()); }
+    size_t imageDataSize() const;
+    DataBlock::CompressionCodec compression() const;
+    void setCompression(DataBlock::CompressionCodec compression, int level = -1);
+    bool byteShuffling() const;
+    void setByteshuffling(bool enable);
+
+    /** Convert between Planar and Normal storage format s*/
     void convertPixelStorageTo(PixelStorage storage);
 
     static Type imageTypeEnum(const QString &type);
@@ -138,6 +162,24 @@ struct Image
     static QString sampleFormatString(SampleFormat format);
     static ColorSpace colorSpaceEnum(const QString &colorSpace);
     static QString colorSpaceString(ColorSpace colorSpace);
+    static size_t sampleFormatSize(SampleFormat sampleFormat);
+
+private:
+    uint64_t _width = 0;
+    uint64_t _height = 0;
+    uint64_t _channelCount = 1;
+    Bounds _bounds = {0.0, 1.0};
+    Type _imageType = Light;
+    PixelStorage _pixelStorage = Planar;
+    SampleFormat _sampleFormat = UInt16;
+    ColorSpace _colorSpace = Gray;
+    DataBlock _dataBlock;
+    QByteArray _iccProfile;
+    std::vector<Property> _properties;
+    std::vector<FITSKeyword> _fitsKeywords;
+
+    friend class XISFReader;
+    friend class XISFWriter;
 };
 
 class LIBXISF_EXPORT XISFReader
@@ -148,7 +190,9 @@ public:
     void open(const QByteArray &data);
     /** Open image from QIODevice. This method takes ownership of *io pointer */
     void open(QIODevice *io);
+    /** Close opended file release all data. */
     void close();
+    /** Return number of images inside file */
     int imagesCount() const;
     const Image& getImage(uint32_t n);
 private:

@@ -11,21 +11,16 @@ void benchmarkType(float avg, float stdDev)
     std::mt19937 gen;
     std::normal_distribution<float> normalDist {avg, stdDev};
 
+    Image image(2048, 2048);
     UInt32 pixels = 2048*2048;
     UInt32 size = pixels*sizeof(T);
-    QByteArray imageData;
-    imageData.resize(size);
-    T *ptr = (T*)imageData.data();
+    T *ptr = (T*)image.imageData();
     for(UInt32 i=0; i < pixels; i++)
     {
         ptr[i] = normalDist(gen);
     }
 
     QElapsedTimer timer;
-    Image image;
-    image.width = 2048;
-    image.height = 2048;
-    image.dataBlock.data = imageData;
     double baseSize;
 
     {
@@ -39,7 +34,7 @@ void benchmarkType(float avg, float stdDev)
                   << size/1024.0/1.024/timer.elapsed() << "MiB/s" << std::endl;
     }
     {
-        image.dataBlock.codec = DataBlock::Zlib;
+        image.setCompression(DataBlock::Zlib);
         timer.start();
         XISFWriter writer;
         writer.writeImage(image);
@@ -49,7 +44,7 @@ void benchmarkType(float avg, float stdDev)
                   << size/1024.0/1.024/timer.elapsed() << "MiB/s\tRatio: " << baseSize/xisfImage.size() << std::endl;
     }
     {
-        image.dataBlock.codec = DataBlock::LZ4;
+        image.setCompression(DataBlock::LZ4);
         timer.start();
         XISFWriter writer;
         writer.writeImage(image);
@@ -59,7 +54,7 @@ void benchmarkType(float avg, float stdDev)
                   << size/1024.0/1.024/timer.elapsed() << "MiB/s\tRatio: " << baseSize/xisfImage.size() << std::endl;
     }
     {
-        image.dataBlock.codec = DataBlock::LZ4HC;
+        image.setCompression(DataBlock::LZ4HC);
         timer.start();
         XISFWriter writer;
         writer.writeImage(image);
@@ -68,9 +63,9 @@ void benchmarkType(float avg, float stdDev)
         std::cout << "LZ4HC compression   \tElapsed time: " << timer.elapsed() << " " << "ms\tSpeed: "
                   << size/1024.0/1.024/timer.elapsed() << "MiB/s\tRatio: " << baseSize/xisfImage.size() << std::endl;
     }
-    image.dataBlock.byteShuffling = sizeof(T);
+    image.setByteshuffling(true);
     {
-        image.dataBlock.codec = DataBlock::Zlib;
+        image.setCompression(DataBlock::Zlib);
         timer.start();
         XISFWriter writer;
         writer.writeImage(image);
@@ -80,7 +75,7 @@ void benchmarkType(float avg, float stdDev)
                   << size/1024.0/1.024/timer.elapsed() << "MiB/s\tRatio: " << baseSize/xisfImage.size() << std::endl;
     }
     {
-        image.dataBlock.codec = DataBlock::LZ4;
+        image.setCompression(DataBlock::LZ4);
         timer.start();
         XISFWriter writer;
         writer.writeImage(image);
@@ -90,7 +85,7 @@ void benchmarkType(float avg, float stdDev)
                   << size/1024.0/1.024/timer.elapsed() << "MiB/s\tRatio: " << baseSize/xisfImage.size() << std::endl;
     }
     {
-        image.dataBlock.codec = DataBlock::LZ4HC;
+        image.setCompression(DataBlock::LZ4HC);
         timer.start();
         XISFWriter writer;
         writer.writeImage(image);

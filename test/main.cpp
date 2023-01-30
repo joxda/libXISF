@@ -46,6 +46,8 @@ int main(int argc, char **argv)
             image.addProperty(Property("PropertyFloat64", (Float64) 0.64));
             image.addProperty(Property("PropertyComplex32", Complex32{3.0, -2.0}));
             image.addProperty(Property("PropertyComplex64", Complex64{-3.0, 2.0}));
+            image.addProperty(Property("VectorUInt16", UI16Vector({23, 45, 86})));
+            image.addProperty(Property("VectorComplex32", C32Vector({{1, 2}, {3, 4}, {5, 6}})));
             image.addFITSKeyword({"RA", "226.9751163116387", "Right ascension of the center of the image (deg)"});
             image.addFITSKeyword({"DEC", "62.02302376908295", "Declination of the center of the image (deg)"});
             writer.writeImage(image);

@@ -24,6 +24,7 @@
 #include <QIODevice>
 #include <QVariant>
 #include <QXmlStreamReader>
+#include <QDateTime>
 
 class QXmlStreamReader;
 
@@ -316,6 +317,7 @@ Q_DECLARE_METATYPE(LibXISF::Float32);
 Q_DECLARE_METATYPE(LibXISF::Float64);
 Q_DECLARE_METATYPE(LibXISF::Complex32);
 Q_DECLARE_METATYPE(LibXISF::Complex64);
+Q_DECLARE_METATYPE(LibXISF::TimePoint);
 Q_DECLARE_METATYPE(LibXISF::I8Vector);
 Q_DECLARE_METATYPE(LibXISF::UI8Vector);
 Q_DECLARE_METATYPE(LibXISF::I16Vector);

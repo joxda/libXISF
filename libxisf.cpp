@@ -19,6 +19,7 @@
 #include "libxisf.h"
 #include <unordered_map>
 #include <unordered_set>
+#include <cstring>
 #include <QXmlStreamReader>
 #include <QDateTime>
 #include <QtEndian>
@@ -49,6 +50,7 @@ static std::unordered_map<QString, Image::SampleFormat> sampleFormatToEnum;
 static std::unordered_map<Image::SampleFormat, QString> sampleFormatToString;
 static std::unordered_map<QString, Image::ColorSpace> colorSpaceToEnum;
 static std::unordered_map<Image::ColorSpace, QString> colorSpaceToString;
+static std::unordered_map<int, size_t> vectorTypeSizes;
 
 static void byteShuffle(QByteArray &data, int itemSize)
 {
@@ -425,16 +427,16 @@ size_t Image::sampleFormatSize(SampleFormat sampleFormat)
 {
     switch(sampleFormat)
     {
-        case Image::UInt8:   return sizeof(UInt8);
-        case Image::UInt16:  return sizeof(UInt16);
-        case Image::UInt32:  return sizeof(UInt32);
-        case Image::UInt64:  return sizeof(UInt64);
-        case Image::Float32: return sizeof(Float32);
-        case Image::Float64: return sizeof(Float64);
-        case Image::Complex32: return sizeof(Complex32);
-        case Image::Complex64: return sizeof(Complex64);
+        case Image::UInt8:   return sizeof(LibXISF::UInt8);
+        case Image::UInt16:  return sizeof(LibXISF::UInt16);
+        case Image::UInt32:  return sizeof(LibXISF::UInt32);
+        case Image::UInt64:  return sizeof(LibXISF::UInt64);
+        case Image::Float32: return sizeof(LibXISF::Float32);
+        case Image::Float64: return sizeof(LibXISF::Float64);
+        case Image::Complex32: return sizeof(LibXISF::Complex32);
+        case Image::Complex64: return sizeof(LibXISF::Complex64);
     }
-    return UInt16;
+    return sizeof(UInt16);
 }
 
 XISFReader::XISFReader()
@@ -594,7 +596,7 @@ Property XISFReader::readPropertyElement()
 
     QVariant value;
 
-    if(type == "String")
+    if(type == "String" && !attributes.hasAttribute("location"))
     {
         property.value = _xml->readElementText();
     }
@@ -606,15 +608,15 @@ Property XISFReader::readPropertyElement()
     }
     else
     {
-        //TODO properly handle data block properties
-        throw Error("Data block properties not supported");
-        /*DataBlock dataBlock = readDataBlock();
+        DataBlock dataBlock = readDataBlock();
         if(dataBlock.attachmentPos)
         {
             _io->seek(dataBlock.attachmentPos);
             dataBlock.decompress(_io->read(dataBlock.attachmentSize));
         }
-        property.value = dataBlock.data;*/
+        property.value = dataBlock.data;
+        if(!property.value.convert(typeToId[type]))
+            throw Error("Failed to convert property data");
     }
 
     return property;
@@ -872,8 +874,18 @@ void XISFWriter::writePropertyElement(const Property &property)
 
     if(type == QMetaType::QString)
         _xml->writeCharacters(property.value.toString());
+    else if(type == QMetaType::Bool)
+        _xml->writeAttribute("value", property.value.toBool() ? "1" : "0");
     else if(type == QMetaType::SChar || type == QMetaType::UChar)
         _xml->writeAttribute("value", QString::number(property.value.toInt()));
+    else if(vectorTypeSizes.count(type))
+    {
+        DataBlock dataBlock;
+        dataBlock.data = property.value.toByteArray();
+        writeDataBlockAttributes(dataBlock);
+        _xml->writeAttribute("length", QString::number(dataBlock.data.size() / vectorTypeSizes[type]));
+        _xml->writeCharacters(dataBlock.data.toBase64());
+    }
     else
         _xml->writeAttribute("value", property.value.toString());
     _xml->writeEndElement();
@@ -899,11 +911,19 @@ void XISFWriter::writeMetadata()
     _xml->writeEndElement();
 }
 
-#define REGISTER_METATYPE(type) { int id = qRegisterMetaType<type>("LibXISF::"#type); \
+#define REGISTER_METATYPE(type) { int id = qMetaTypeId<type>(); \
     typeToId.insert({#type, id}); idToType.insert({id, #type}); }
 
 #define STRING_ENUM(map, map2, c, e) { map.insert({#e, c::e}); map2.insert({c::e, #e}); }
-//#define ENUM_STRING(e) {#e, e}
+
+#define REGISTER_VECTOR_TYPE(type) { vectorTypeSizes.insert({typeToId[#type], sizeof(type::value_type)});   \
+    QMetaType::registerConverter<type, QByteArray>([](const type &v) {                                      \
+        return QByteArray((const char*)&v[0], v.size() * sizeof(type::value_type));                         \
+    });                                                                                                     \
+    QMetaType::registerConverter<QByteArray, type>([](const QByteArray &v) {                                \
+        type t(v.size() / sizeof(type::value_type));  std::memcpy(&t[0], v.constData(), v.size());          \
+        return t;                                                                                           \
+    }); }
 
 struct Init
 {
@@ -922,6 +942,7 @@ struct Init
         REGISTER_METATYPE(Float64);
         REGISTER_METATYPE(Complex32);
         REGISTER_METATYPE(Complex64);
+        REGISTER_METATYPE(TimePoint);
         REGISTER_METATYPE(I8Vector);
         REGISTER_METATYPE(UI8Vector);
         REGISTER_METATYPE(I16Vector);
@@ -975,6 +996,19 @@ struct Init
         STRING_ENUM(colorSpaceToEnum, colorSpaceToString, Image, Gray);
         STRING_ENUM(colorSpaceToEnum, colorSpaceToString, Image, RGB);
         STRING_ENUM(colorSpaceToEnum, colorSpaceToString, Image, CIELab);
+
+        REGISTER_VECTOR_TYPE(I8Vector);
+        REGISTER_VECTOR_TYPE(UI8Vector);
+        REGISTER_VECTOR_TYPE(I16Vector);
+        REGISTER_VECTOR_TYPE(UI16Vector);
+        REGISTER_VECTOR_TYPE(I32Vector);
+        REGISTER_VECTOR_TYPE(UI32Vector);
+        REGISTER_VECTOR_TYPE(I64Vector);
+        REGISTER_VECTOR_TYPE(UI64Vector);
+        REGISTER_VECTOR_TYPE(F32Vector);
+        REGISTER_VECTOR_TYPE(F64Vector);
+        REGISTER_VECTOR_TYPE(C32Vector);
+        REGISTER_VECTOR_TYPE(C64Vector);
 
         QMetaType::registerConverter<Complex32, QString>([](const Complex32 &c){ return QString("(%1,%2)").arg(c.real).arg(c.imag); });
         QMetaType::registerConverter<Complex64, QString>([](const Complex64 &c){ return QString("(%1,%2)").arg(c.real).arg(c.imag); });

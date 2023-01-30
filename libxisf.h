@@ -160,6 +160,8 @@ public:
     static PixelStorage pixelStorageEnum(const QString &storage);
     static QString pixelStorageString(PixelStorage storage);
     static SampleFormat sampleFormatEnum(const QString &format);
+    template<typename T>
+    static SampleFormat sampleFormatEnum();
     static QString sampleFormatString(SampleFormat format);
     static ColorSpace colorSpaceEnum(const QString &colorSpace);
     static QString colorSpaceString(ColorSpace colorSpace);
@@ -301,6 +303,19 @@ public:
     explicit Error(const std::string &msg) : std::exception(), _msg(msg) {}
     const char* what() const noexcept { return _msg.c_str(); }
 };
+
+template<typename T>
+Image::SampleFormat Image::sampleFormatEnum()
+{
+    if(std::is_same<T, LibXISF::UInt8>::value)return Image::UInt8;
+    if(std::is_same<T, LibXISF::UInt16>::value)return Image::UInt16;
+    if(std::is_same<T, LibXISF::UInt32>::value)return Image::UInt32;
+    if(std::is_same<T, LibXISF::UInt64>::value)return Image::UInt64;
+    if(std::is_same<T, LibXISF::Float32>::value)return Image::Float32;
+    if(std::is_same<T, LibXISF::Float64>::value)return Image::Float64;
+    if(std::is_same<T, LibXISF::Complex32>::value)return Image::Complex32;
+    if(std::is_same<T, LibXISF::Complex64>::value)return Image::Complex64;
+}
 
 }
 

@@ -11,10 +11,10 @@ void benchmarkType(float avg, float stdDev)
     std::mt19937 gen;
     std::normal_distribution<float> normalDist {avg, stdDev};
 
-    Image image(2048, 2048);
+    Image image(2048, 2048, 1, Image::sampleFormatEnum<T>());
     UInt32 pixels = 2048*2048;
     UInt32 size = pixels*sizeof(T);
-    T *ptr = (T*)image.imageData();
+    T *ptr = image.imageData<T>();
     for(UInt32 i=0; i < pixels; i++)
     {
         ptr[i] = normalDist(gen);

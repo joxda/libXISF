@@ -38,6 +38,43 @@ template<> struct std::hash<QString>
     }
 };
 #endif
+namespace LibXISF
+{
+class MatrixConvert
+{
+    int _rows = 0;
+    int _cols = 0;
+    QByteArray _data;
+public:
+    const QByteArray& data() const
+    {
+        return _data;
+    }
+    int rows() const { return _rows; }
+    int cols() const { return _cols; }
+    MatrixConvert() = default;
+    MatrixConvert(int rows, int cols, const QByteArray &data) : _rows(rows), _cols(cols), _data(data) {}
+
+    template<typename T>
+    static Matrix<T> toMatrix(const MatrixConvert &m)
+    {
+        Matrix<T> matrix(m._rows, m._cols);
+        std::memcpy(&matrix._elem[0], m._data.constData(), m._data.size());
+        return matrix;
+    }
+    template<typename T>
+    static MatrixConvert fromMatrix(const Matrix<T> &m)
+    {
+        MatrixConvert mc;
+        mc._rows = m._rows;
+        mc._cols = m._cols;
+        mc._data = QByteArray((const char*)&m._elem[0], mc._rows * mc._cols * sizeof(T));
+        return mc;
+    }
+};
+}
+
+Q_DECLARE_METATYPE(LibXISF::MatrixConvert);
 
 namespace LibXISF
 {
@@ -51,6 +88,7 @@ static std::unordered_map<Image::SampleFormat, QString> sampleFormatToString;
 static std::unordered_map<QString, Image::ColorSpace> colorSpaceToEnum;
 static std::unordered_map<Image::ColorSpace, QString> colorSpaceToString;
 static std::unordered_map<int, size_t> vectorTypeSizes;
+static std::unordered_map<int, size_t> matrixTypeSizes;
 
 static void byteShuffle(QByteArray &data, int itemSize)
 {
@@ -594,6 +632,7 @@ Property XISFReader::readPropertyElement()
     if(typeToId.count(type) == 0)
         throw Error("Invalid type in property");
 
+    int typeId = typeToId[type];
     QVariant value;
 
     if(type == "String" && !attributes.hasAttribute("location"))
@@ -603,7 +642,7 @@ Property XISFReader::readPropertyElement()
     else if(attributes.hasAttribute("value"))
     {
         value = attributes.value("value").toString();
-        value.convert(typeToId[type]);
+        value.convert(typeId);
         property.value = value;
     }
     else
@@ -614,9 +653,28 @@ Property XISFReader::readPropertyElement()
             _io->seek(dataBlock.attachmentPos);
             dataBlock.decompress(_io->read(dataBlock.attachmentSize));
         }
-        property.value = dataBlock.data;
-        if(!property.value.convert(typeToId[type]))
-            throw Error("Failed to convert property data");
+        if(vectorTypeSizes.count(typeId))
+        {
+            property.value = dataBlock.data;
+            if(!property.value.convert(typeId))
+                throw Error("Failed to convert vector property data");
+        }
+        else if(matrixTypeSizes.count(typeId))
+        {
+            bool ok1, ok2;
+            int rows = attributes.value("rows").toInt(&ok1);
+            int cols = attributes.value("columns").toInt(&ok2);
+            if(!ok1 || !ok2)
+                throw Error("Invalid rows and/or columns");
+
+            property.value = QVariant::fromValue<MatrixConvert>(MatrixConvert(rows, cols, dataBlock.data));
+            if(!property.value.convert(typeId))
+                throw Error("Failed to convert matrix property data");
+        }
+        else
+        {
+            property.value = dataBlock.data;
+        }
     }
 
     return property;
@@ -886,6 +944,16 @@ void XISFWriter::writePropertyElement(const Property &property)
         _xml->writeAttribute("length", QString::number(dataBlock.data.size() / vectorTypeSizes[type]));
         _xml->writeCharacters(dataBlock.data.toBase64());
     }
+    else if(matrixTypeSizes.count(type))
+    {
+        MatrixConvert mc = property.value.value<MatrixConvert>();
+        DataBlock dataBlock;
+        dataBlock.data = mc.data();
+        writeDataBlockAttributes(dataBlock);
+        _xml->writeAttribute("rows", QString::number(mc.rows()));
+        _xml->writeAttribute("columns", QString::number(mc.cols()));
+        _xml->writeCharacters(dataBlock.data.toBase64());
+    }
     else
         _xml->writeAttribute("value", property.value.toString());
     _xml->writeEndElement();
@@ -924,6 +992,10 @@ void XISFWriter::writeMetadata()
         type t(v.size() / sizeof(type::value_type));  std::memcpy(&t[0], v.constData(), v.size());          \
         return t;                                                                                           \
     }); }
+
+#define REGISTER_MATRIX_TYPE(type, mtype) { matrixTypeSizes.insert({typeToId[#type], sizeof(mtype)});       \
+    QMetaType::registerConverter<type, MatrixConvert>(MatrixConvert::fromMatrix<mtype>);                    \
+    QMetaType::registerConverter<MatrixConvert, type>(MatrixConvert::toMatrix<mtype>);}
 
 struct Init
 {
@@ -1009,6 +1081,19 @@ struct Init
         REGISTER_VECTOR_TYPE(F64Vector);
         REGISTER_VECTOR_TYPE(C32Vector);
         REGISTER_VECTOR_TYPE(C64Vector);
+
+        REGISTER_MATRIX_TYPE(I8Matrix, Int8);
+        REGISTER_MATRIX_TYPE(UI8Matrix, UInt8);
+        REGISTER_MATRIX_TYPE(I16Matrix, Int16);
+        REGISTER_MATRIX_TYPE(UI16Matrix, UInt16);
+        REGISTER_MATRIX_TYPE(I32Matrix, Int32);
+        REGISTER_MATRIX_TYPE(UI32Matrix, UInt32);
+        REGISTER_MATRIX_TYPE(I64Matrix, Int64);
+        REGISTER_MATRIX_TYPE(UI64Matrix, UInt64);
+        REGISTER_MATRIX_TYPE(F32Matrix, Float32);
+        REGISTER_MATRIX_TYPE(F64Matrix, Float64);
+        REGISTER_MATRIX_TYPE(C32Matrix, Complex32);
+        REGISTER_MATRIX_TYPE(C64Matrix, Complex64);
 
         QMetaType::registerConverter<Complex32, QString>([](const Complex32 &c){ return QString("(%1,%2)").arg(c.real).arg(c.imag); });
         QMetaType::registerConverter<Complex64, QString>([](const Complex64 &c){ return QString("(%1,%2)").arg(c.real).arg(c.imag); });

@@ -48,6 +48,12 @@ int main(int argc, char **argv)
             image.addProperty(Property("PropertyComplex64", Complex64{-3.0, 2.0}));
             image.addProperty(Property("VectorUInt16", UI16Vector({23, 45, 86})));
             image.addProperty(Property("VectorComplex32", C32Vector({{1, 2}, {3, 4}, {5, 6}})));
+            UI16Matrix m(2, 3);
+            m(0, 0) = 0;
+            m(0, 1) = 1;
+            m(0, 2) = 2;
+            m(1, 0) = 10;
+            image.addProperty(Property("UI16Matrix", m));
             image.addFITSKeyword({"RA", "226.9751163116387", "Right ascension of the center of the image (deg)"});
             image.addFITSKeyword({"DEC", "62.02302376908295", "Declination of the center of the image (deg)"});
             writer.writeImage(image);

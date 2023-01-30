@@ -251,9 +251,16 @@ struct Complex64
 template<typename T>
 class Matrix
 {
-    int width;
-    int height;
-    std::vector<T> elem;
+    int _rows = 0;
+    int _cols = 0;
+    std::vector<T> _elem;
+public:
+    Matrix() = default;
+    Matrix(int rows, int cols) : _rows(rows), _cols(cols), _elem(rows * cols) {}
+    void resize(int rows, int cols) { _rows = rows; _cols = cols; _elem.resize(rows * cols); }
+    T& operator()(int row, int col) { return _elem[row * _cols + col]; }
+
+    friend class MatrixConvert;
 };
 
 typedef bool Boolean;

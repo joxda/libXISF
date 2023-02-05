@@ -26,11 +26,12 @@ target_link_libraries(XISF PUBLIC Qt${QT_VERSION_MAJOR}::Core)
 
 target_compile_definitions(XISF PRIVATE LIBXISF_LIBRARY)
 
-set_target_properties(XISF PROPERTIES PUBLIC_HEADER libxisf.h)
+set(XISF_PUBLIC_HEADERS libxisf.h libXISF_global.h)
 
 include(GNUInstallDirs)
 
-install(TARGETS XISF PUBLIC_HEADER)
+install(FILES ${XISF_PUBLIC_HEADERS} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(TARGETS XISF LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 #testing
 

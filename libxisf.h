@@ -169,8 +169,11 @@ public:
     bool addFITSKeywordAsProperty(const QString &name, const QVariant &value);
 
     void* imageData();
+    const void* imageData() const;
     template<typename T>
     T* imageData(){ return static_cast<T*>(imageData()); }
+    template<typename T>
+    const T* imageData() const { return static_cast<T*>(imageData()); }
     size_t imageDataSize() const;
     DataBlock::CompressionCodec compression() const;
     void setCompression(DataBlock::CompressionCodec compression, int level = -1);

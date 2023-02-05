@@ -400,6 +400,11 @@ void *Image::imageData()
     return _dataBlock.data.data();
 }
 
+const void *Image::imageData() const
+{
+    return _dataBlock.data.data();
+}
+
 size_t Image::imageDataSize() const
 {
     return _dataBlock.data.size();

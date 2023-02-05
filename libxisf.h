@@ -74,6 +74,24 @@ struct LIBXISF_EXPORT FITSKeyword
     QString comment;
 };
 
+/**
+Describe color filter array. Each letter in pattern describe color of element.
+0 - A nonexistent or undefined CFA element
+R - Red
+G - Green
+B - Blue
+W - White or panchromatic
+C - Cyan
+M - Magenta
+Y - Yellow
+*/
+struct LIBXISF_EXPORT ColorFilterArray
+{
+    int width = 0;
+    int height = 0;
+    QString pattern;
+};
+
 typedef std::pair<double, double> Bounds;
 
 class LIBXISF_EXPORT Image
@@ -138,10 +156,17 @@ public:
     void setSampleFormat(SampleFormat newSampleFormat);
     ColorSpace colorSpace() const;
     void setColorSpace(ColorSpace newColorSpace);
+    const ColorFilterArray colorFilterArray() const;
+    void setColorFilterArray(const ColorFilterArray cfa);
     const std::vector<Property> &imageProperties() const;
     void addProperty(const Property &property);
+    void updateProperty(const Property &property);
     const std::vector<FITSKeyword> fitsKeywords() const;
     void addFITSKeyword(const FITSKeyword &keyword);
+    /** Add image property while doing automatic conversion of FITS name to XISF property
+     *  For example OBSERVER => Observer:Name, SITELAT => Observation:Location:Latitude
+    */
+    bool addFITSKeywordAsProperty(const QString &name, const QVariant &value);
 
     void* imageData();
     template<typename T>
@@ -178,7 +203,9 @@ private:
     ColorSpace _colorSpace = Gray;
     DataBlock _dataBlock;
     QByteArray _iccProfile;
+    ColorFilterArray _cfa;
     std::vector<Property> _properties;
+    std::map<QString, uint32_t> _propertiesId;
     std::vector<FITSKeyword> _fitsKeywords;
 
     friend class XISFReader;
@@ -207,6 +234,7 @@ private:
     void readDataElement(DataBlock &dataBlock);
     DataBlock readDataBlock();
     void readCompression(DataBlock &dataBlock);
+    ColorFilterArray readCFA();
 
     std::unique_ptr<QIODevice> _io;
     std::unique_ptr<QXmlStreamReader> _xml;
@@ -230,6 +258,7 @@ private:
     void writePropertyElement(const Property &property);
     void writeFITSKeyword(const FITSKeyword &keyword);
     void writeMetadata();
+    void writeCFA(const Image &image);
     std::unique_ptr<QXmlStreamWriter> _xml;
     QByteArray _xisfHeader;
     QByteArray _attachmentsData;

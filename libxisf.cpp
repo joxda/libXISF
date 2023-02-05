@@ -90,6 +90,36 @@ static std::unordered_map<Image::ColorSpace, QString> colorSpaceToString;
 static std::unordered_map<int, size_t> vectorTypeSizes;
 static std::unordered_map<int, size_t> matrixTypeSizes;
 
+static const std::unordered_map<QString, std::pair<QString, int>> fitsNameToPropertyIdTypeConvert = {
+    {"OBSERVER", {"Observer:Name", QMetaType::QString}},
+    {"RADECSYS", {"Observation:CelestialReferenceSystem", QMetaType::QString}},
+    {"CRVAL1",   {"Observation:Center:Dec", QMetaType::Double}},
+    {"CRVAL2",   {"Observation:Center:RA", QMetaType::Double}},
+    {"CRPIX1",   {"Observation:Center:X", QMetaType::Double}},
+    {"CRPIX2",   {"Observation:Center:Y", QMetaType::Double}},
+    {"EQUINOX",  {"Observation:Equinox", QMetaType::Double}},
+    {"SITELAT",  {"Observation:Location:Latitude", QMetaType::Double}},
+    {"SITELONG", {"Observation:Location:Longitude", QMetaType::Double}},
+    {"OBJECT",   {"Observation:Object:Name", QMetaType::QString}},
+    {"DEC",      {"Observation:Object:Dec", QMetaType::Double}},
+    {"RA",       {"Observation:Object:RA", QMetaType::Double}},
+    {"DATE-OBS", {"Observation:Time:Start", QMetaType::QDateTime}},
+    {"DATE-END", {"Observation:Time:End", QMetaType::QDateTime}},
+    {"GAIN",     {"Instrument:Camera:Gain", QMetaType::Float}},
+    {"ISOSPEED", {"Instrument:Camera:ISOSpeed", QMetaType::Int}},
+    {"INSTRUME", {"Instrument:Camera:Name", QMetaType::QString}},
+    {"ROTATANG", {"Instrument:Camera:Rotation", QMetaType::Float}},
+    {"XBINNING", {"Instrument:Camera:XBinning", QMetaType::Int}},
+    {"YBINNING", {"Instrument:Camera:YBinning", QMetaType::Int}},
+    {"EXPTIME",  {"Instrument:ExposureTime", QMetaType::Float}},
+    {"FILTER",   {"Instrument:Filter:Name", QMetaType::QString}},
+    {"FOCUSPOS", {"Instrument:Focuser:Position", QMetaType::Float}},
+    {"CCD-TEMP", {"Instrument:Sensor:Temperature", QMetaType::Float}},
+    {"APTDIA",   {"Instrument:Telescope:Aperture", QMetaType::Float}},
+    {"FOCALLEN", {"Instrument:Telescope:FocalLength", QMetaType::Float}},
+    {"TELESCOP", {"Instrument:Telescope:Name", QMetaType::QString}},
+};
+
 static void byteShuffle(QByteArray &data, int itemSize)
 {
     if(itemSize > 1)
@@ -310,6 +340,16 @@ void Image::setColorSpace(ColorSpace newColorSpace)
     _colorSpace = newColorSpace;
 }
 
+const ColorFilterArray Image::colorFilterArray() const
+{
+    return _cfa;
+}
+
+void Image::setColorFilterArray(const ColorFilterArray cfa)
+{
+    _cfa = cfa;
+}
+
 const std::vector<Property>& Image::imageProperties() const
 {
     return _properties;
@@ -317,12 +357,19 @@ const std::vector<Property>& Image::imageProperties() const
 
 void Image::addProperty(const Property &property)
 {
-    for(auto &p : _properties)
-    {
-        if(p.id == property.id)
-            throw Error("Duplicate property id");
-    }
+    if(_propertiesId.count(property.id))
+        throw Error("Duplicate property id");
+
+    _propertiesId[property.id] = _properties.size();
     _properties.push_back(property);
+}
+
+void Image::updateProperty(const Property &property)
+{
+    if(!_propertiesId.count(property.id))
+        addProperty(property);
+    else
+        _properties[_propertiesId[property.id]] = property;
 }
 
 const std::vector<FITSKeyword> Image::fitsKeywords() const
@@ -333,6 +380,19 @@ const std::vector<FITSKeyword> Image::fitsKeywords() const
 void Image::addFITSKeyword(const FITSKeyword &keyword)
 {
     _fitsKeywords.push_back(keyword);
+}
+
+bool Image::addFITSKeywordAsProperty(const QString &name, const QVariant &value)
+{
+    if(fitsNameToPropertyIdTypeConvert.count(name))
+    {
+        auto &c = fitsNameToPropertyIdTypeConvert.at(name);
+        Property prop(c.first, value);
+        prop.value.convert(c.second);
+        updateProperty(prop);
+        return true;
+    }
+    return false;
 }
 
 void *Image::imageData()
@@ -603,9 +663,11 @@ void XISFReader::readImageElement()
         if(_xml->tokenType() == QXmlStreamReader::StartElement)
         {
             if(_xml->name() == "Property")
-                image._properties.push_back(readPropertyElement());
+                image.addProperty(readPropertyElement());
             else if(_xml->name() == "FITSKeyword")
                 image._fitsKeywords.push_back(readFITSKeyword());
+            else if(_xml->name() == "ColorFilterArray")
+                image._cfa = readCFA();
             else if(_xml->name() == "ICCProfile")
             {
                 DataBlock icc = readDataBlock();
@@ -764,6 +826,23 @@ void XISFReader::readCompression(DataBlock &dataBlock)
     }
 }
 
+ColorFilterArray XISFReader::readCFA()
+{
+    ColorFilterArray cfa;
+    QXmlStreamAttributes attributes = _xml->attributes();
+    if(attributes.hasAttribute("pattern") && attributes.hasAttribute("width") && attributes.hasAttribute("height"))
+    {
+        cfa.pattern = attributes.value("pattern").toString();
+        cfa.width = attributes.value("width").toInt();
+        cfa.height = attributes.value("height").toInt();
+    }
+    else
+    {
+        throw Error("ColorFilterArray element missing one of mandatory attributes");
+    }
+    return cfa;
+}
+
 XISFWriter::XISFWriter()
 {
     _xml = std::make_unique<QXmlStreamWriter>();
@@ -874,6 +953,8 @@ void XISFWriter::writeImageElement(const Image &image)
     for(auto &fitsKeyword : image._fitsKeywords)
         writeFITSKeyword(fitsKeyword);
 
+    writeCFA(image);
+
     _xml->writeEndElement();
 }
 
@@ -977,6 +1058,17 @@ void XISFWriter::writeMetadata()
     writePropertyElement(Property("XISF:CreationTime", QDateTime::currentDateTimeUtc().toString(Qt::ISODate)));
     writePropertyElement(Property("XISF:CreatorApplication", "LibXISF"));
     _xml->writeEndElement();
+}
+
+void XISFWriter::writeCFA(const Image &image)
+{
+    if(image._cfa.width && image._cfa.height)
+    {
+        _xml->writeEmptyElement("ColorFilterArray");
+        _xml->writeAttribute("pattern", image._cfa.pattern);
+        _xml->writeAttribute("width", QString::number(image._cfa.width));
+        _xml->writeAttribute("height", QString::number(image._cfa.height));
+    }
 }
 
 #define REGISTER_METATYPE(type) { int id = qMetaTypeId<type>(); \

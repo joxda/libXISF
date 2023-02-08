@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.14)
 
-project(libXISF VERSION 0.1.0 LANGUAGES CXX C)
+project(libXISF VERSION 0.1.1 LANGUAGES CXX C)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(CMAKE_AUTOUIC ON)
@@ -21,6 +21,8 @@ add_library(XISF SHARED
   lz4/lz4hc.c
   lz4/lz4hc.h
 )
+
+set_target_properties(XISF PROPERTIES VERSION ${CMAKE_PROJECT_VERSION})
 
 target_link_libraries(XISF PUBLIC Qt${QT_VERSION_MAJOR}::Core)
 

@@ -22,7 +22,7 @@ add_library(XISF SHARED
   lz4/lz4hc.h
 )
 
-set_target_properties(XISF PROPERTIES VERSION ${CMAKE_PROJECT_VERSION})
+set_target_properties(XISF PROPERTIES VERSION ${PROJECT_VERSION} SOVERSION ${PROJECT_VERSION_MAJOR})
 
 target_link_libraries(XISF PUBLIC Qt${QT_VERSION_MAJOR}::Core)
 

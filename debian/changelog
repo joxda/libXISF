@@ -1,3 +1,9 @@
+libxisf (0.1.1-ubuntu1) focal; urgency=medium
+
+  * Fixed packaging
+
+ -- Dušan Poizl <nou@nouspiro.space>  Wed, 08 Feb 2023 18:57:50 +0100
+
 libxisf (0.1.0-ubuntu1) focal; urgency=low
 
   * Initial release.

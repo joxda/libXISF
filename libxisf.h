@@ -49,7 +49,7 @@ struct DataBlock
     int compressLevel = -1;
     QByteArray data;
     void decompress(const QByteArray &input, const QString &encoding = "");
-    void compress();
+    void compress(int sampleFormatSize);
 };
 
 struct LIBXISF_EXPORT Property

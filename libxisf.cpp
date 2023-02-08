@@ -26,6 +26,7 @@
 #include <QElapsedTimer>
 #include <QFile>
 #include <QBuffer>
+#include <QProcessEnvironment>
 #include "lz4/lz4.h"
 #include "lz4/lz4hc.h"
 
@@ -89,6 +90,9 @@ static std::unordered_map<QString, Image::ColorSpace> colorSpaceToEnum;
 static std::unordered_map<Image::ColorSpace, QString> colorSpaceToString;
 static std::unordered_map<int, size_t> vectorTypeSizes;
 static std::unordered_map<int, size_t> matrixTypeSizes;
+static DataBlock::CompressionCodec compressionCodecOverride = DataBlock::None;
+static bool byteShuffleOverride = false;
+static int compressionLevelOverride = -1;
 
 static const std::unordered_map<QString, std::pair<QString, int>> fitsNameToPropertyIdTypeConvert = {
     {"OBSERVER", {"Observer:Name", QMetaType::QString}},
@@ -197,20 +201,22 @@ void DataBlock::decompress(const QByteArray &input, const QString &encoding)
     attachmentPos = 0;
 }
 
-void DataBlock::compress()
+void DataBlock::compress(int sampleFormatSize)
 {
     QByteArray tmp = data;
     uncompressedSize = data.size();
 
-    byteShuffle(tmp, byteShuffling);
+    byteShuffle(tmp, byteShuffleOverride ? sampleFormatSize : byteShuffling);
 
-    switch(codec)
+    CompressionCodec useCodec = compressionCodecOverride != CompressionCodec::None ? compressionCodecOverride : codec;
+    int cLevel = compressionLevelOverride != -1 ? compressionLevelOverride : compressLevel;
+    switch(useCodec)
     {
     case None:
         data = tmp;
         break;
     case Zlib:
-        data = qCompress(tmp);
+        data = qCompress(tmp, cLevel);
         data.remove(0, sizeof(uint32_t));
         break;
     case LZ4:
@@ -218,10 +224,10 @@ void DataBlock::compress()
     {
         int compSize = 0;
         data.resize(LZ4_compressBound(tmp.size()));
-        if(codec == LZ4)
+        if(useCodec == LZ4)
             compSize = LZ4_compress_default(tmp.constData(), data.data(), tmp.size(), data.size());
         else
-            compSize = LZ4_compress_HC(tmp.constData(), data.data(), tmp.size(), data.size(), LZ4HC_CLEVEL_DEFAULT);
+            compSize = LZ4_compress_HC(tmp.constData(), data.data(), tmp.size(), data.size(), cLevel < 0 ? LZ4HC_CLEVEL_DEFAULT : cLevel);
 
         if(compSize <= 0)
             throw Error("LZ4 compression failed");
@@ -327,6 +333,7 @@ Image::SampleFormat Image::sampleFormat() const
 void Image::setSampleFormat(SampleFormat newSampleFormat)
 {
     _sampleFormat = newSampleFormat;
+    if(_dataBlock.byteShuffling)_dataBlock.byteShuffling = sampleFormatSize(_sampleFormat);
     _dataBlock.data.resize(_width * _height * _channelCount * sampleFormatSize(_sampleFormat));
 }
 
@@ -887,7 +894,7 @@ void XISFWriter::writeImage(const Image &image)
 {
     _images.push_back(image);
     _images.back()._dataBlock.attachmentPos = 1;
-    _images.back()._dataBlock.compress();
+    _images.back()._dataBlock.compress(image.sampleFormatSize(image.sampleFormat()));
 }
 
 void XISFWriter::writeHeader()
@@ -1214,6 +1221,26 @@ struct Init
             c.imag = s.rightRef(comma+1).toDouble();
             return c;
         });
+
+        QString compression = QProcessEnvironment::systemEnvironment().value("LIBXISF_COMPRESSION");
+        if(!compression.isEmpty())
+        {
+            if(compression.startsWith("zlib"))
+                compressionCodecOverride = DataBlock::Zlib;
+            else if(compression.startsWith("lz4hc"))
+                compressionCodecOverride = DataBlock::LZ4HC;
+            else if(compression.startsWith("lz4"))
+                compressionCodecOverride = DataBlock::LZ4;
+
+            if(compression.contains("+sh"))
+                byteShuffleOverride = true;
+
+            int index = compression.lastIndexOf(":");
+            if(index > 0)
+            {
+                compressionLevelOverride = compression.mid(index+1).toInt();
+            }
+        }
     }
 };
 

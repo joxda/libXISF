@@ -404,12 +404,12 @@ bool Image::addFITSKeywordAsProperty(const QString &name, const QVariant &value)
 
 void *Image::imageData()
 {
-    return _dataBlock.data.data();
+    return _dataBlock.data.isNull() ? nullptr : _dataBlock.data.data();
 }
 
 const void *Image::imageData() const
 {
-    return _dataBlock.data.data();
+    return _dataBlock.data.isNull() ? nullptr : _dataBlock.data.data();
 }
 
 size_t Image::imageDataSize() const
@@ -591,13 +591,13 @@ int XISFReader::imagesCount() const
     return _images.size();
 }
 
-const Image& XISFReader::getImage(uint32_t n)
+const Image& XISFReader::getImage(uint32_t n, bool readPixels)
 {
     if(n >= _images.size())
         throw Error("Out of bounds");
 
     Image &img = _images[n];
-    if(img._dataBlock.attachmentPos)
+    if(img._dataBlock.attachmentPos && readPixels)
     {
         _io->seek(img._dataBlock.attachmentPos);
         img._dataBlock.decompress(_io->read(img._dataBlock.attachmentSize));

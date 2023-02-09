@@ -227,7 +227,11 @@ public:
     void close();
     /** Return number of images inside file */
     int imagesCount() const;
-    const Image& getImage(uint32_t n);
+    /** Return reference to Image
+     *  @param n index of image
+     *  @param readPixel when false it will read pixel data from file and imageData()
+     *  will return nullptr */
+    const Image& getImage(uint32_t n, bool readPixels = true);
 private:
     void readXISFHeader();
     void readSignature();

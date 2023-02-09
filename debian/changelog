@@ -1,3 +1,9 @@
+libxisf (0.1.2-ubuntu1) UNRELEASED; urgency=medium
+
+  * Add qtbase5-dev as dependency to libxisf-dev
+
+ -- Dušan Poizl <nou@nouspiro.space>  Thu, 09 Feb 2023 21:28:45 +0100
+
 libxisf (0.1.1-ubuntu1) focal; urgency=medium
 
   * Fixed packaging

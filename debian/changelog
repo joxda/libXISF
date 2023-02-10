@@ -1,4 +1,4 @@
-libxisf (0.1.2-ubuntu1) UNRELEASED; urgency=medium
+libxisf (0.1.2-ubuntu1) focal; urgency=medium
 
   * Add qtbase5-dev as dependency to libxisf-dev
 

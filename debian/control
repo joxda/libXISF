@@ -14,7 +14,7 @@ Package: libxisf-dev
 Section: libdevel
 Architecture: any
 Multi-Arch: same
-Depends: libxisf qtbase5-dev (= ${binary:Version}), ${misc:Depends}
+Depends: libxisf (= ${binary:Version}), ${misc:Depends}, qtbase5-dev
 Description: Library to load and save XISF images
  Native format of PixInsight astroprocessing suite
 

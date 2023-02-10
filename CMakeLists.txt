@@ -30,7 +30,8 @@ target_link_libraries(XISF PUBLIC Qt${QT_VERSION_MAJOR}::Core)
 
 if(BUILD_SHARED_LIBS)
     target_compile_definitions(XISF PRIVATE LIBXISF_LIBRARY)
-    target_compile_definitions(XISF LIBXISF_SHARED_LIB)
+else(BUILD_SHARED_LIBS)
+    target_compile_definitions(XISF PUBLIC LIBXISF_STATIC_LIB)
 endif(BUILD_SHARED_LIBS)
 
 set(XISF_PUBLIC_HEADERS libxisf.h libXISF_global.h)

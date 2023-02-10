@@ -21,10 +21,14 @@
 
 #include <QtCore/qglobal.h>
 
-#if defined(LIBXISF_LIBRARY)
-#  define LIBXISF_EXPORT Q_DECL_EXPORT
+#ifdef LIBXISF_SHARED_LIB
+#  if defined(LIBXISF_LIBRARY)
+#    define LIBXISF_EXPORT Q_DECL_EXPORT
+#  else
+#    define LIBXISF_EXPORT Q_DECL_IMPORT
+#  endif
 #else
-#  define LIBXISF_EXPORT Q_DECL_IMPORT
+#  define LIBXISF_EXPORT
 #endif
 
 #endif // LIBXISF_GLOBAL_H

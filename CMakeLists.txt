@@ -12,7 +12,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(QT NAMES Qt6 Qt5 COMPONENTS Core REQUIRED)
 find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Core REQUIRED)
 
-add_library(XISF SHARED
+option(BUILD_SHARED_LIBS "Build using shared libraries" ON)
+
+add_library(XISF
   libXISF_global.h
   libxisf.cpp
   libxisf.h
@@ -26,7 +28,10 @@ set_target_properties(XISF PROPERTIES VERSION ${PROJECT_VERSION} SOVERSION ${PRO
 
 target_link_libraries(XISF PUBLIC Qt${QT_VERSION_MAJOR}::Core)
 
-target_compile_definitions(XISF PRIVATE LIBXISF_LIBRARY)
+if(BUILD_SHARED_LIBS)
+    target_compile_definitions(XISF PRIVATE LIBXISF_LIBRARY)
+    target_compile_definitions(XISF LIBXISF_SHARED_LIB)
+endif(BUILD_SHARED_LIBS)
 
 set(XISF_PUBLIC_HEADERS libxisf.h libXISF_global.h)
 

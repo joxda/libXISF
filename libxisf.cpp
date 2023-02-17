@@ -952,6 +952,7 @@ void XISFWriter::writeImageElement(const Image &image)
     _xml->writeAttribute("sampleFormat", Image::sampleFormatString(image._sampleFormat));
     _xml->writeAttribute("colorSpace", Image::colorSpaceString(image._colorSpace));
     _xml->writeAttribute("imageType", Image::imageTypeString(image._imageType));
+    _xml->writeAttribute("pixelStorage", Image::pixelStorageString(image._pixelStorage));
     if((image._sampleFormat == Image::Float32 || image._sampleFormat == Image::Float64) ||
             image._bounds.first != 0.0 || image._bounds.second != 1.0)
     {

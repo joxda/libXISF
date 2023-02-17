@@ -266,6 +266,7 @@ private:
     void writeFITSKeyword(const FITSKeyword &keyword);
     void writeMetadata();
     void writeCFA(const Image &image);
+    void writeICC(const QByteArray &icc);
     std::unique_ptr<QXmlStreamWriter> _xml;
     QByteArray _xisfHeader;
     QByteArray _attachmentsData;

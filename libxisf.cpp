@@ -966,6 +966,7 @@ void XISFWriter::writeImageElement(const Image &image)
         writeFITSKeyword(fitsKeyword);
 
     writeCFA(image);
+    writeICC(image._iccProfile);
 
     _xml->writeEndElement();
 }
@@ -1080,6 +1081,17 @@ void XISFWriter::writeCFA(const Image &image)
         _xml->writeAttribute("pattern", image._cfa.pattern);
         _xml->writeAttribute("width", QString::number(image._cfa.width));
         _xml->writeAttribute("height", QString::number(image._cfa.height));
+    }
+}
+
+void XISFWriter::writeICC(const QByteArray &icc)
+{
+    if(!icc.isEmpty())
+    {
+        QByteArray base64 = icc.toBase64();
+        _xml->writeStartElement("ICCProfile");
+        _xml->writeAttribute("location", "inline:base64");
+        _xml->writeCharacters(base64);
     }
 }
 

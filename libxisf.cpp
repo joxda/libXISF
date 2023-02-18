@@ -206,17 +206,22 @@ void DataBlock::compress(int sampleFormatSize)
     QByteArray tmp = data;
     uncompressedSize = data.size();
 
-    byteShuffle(tmp, byteShuffleOverride ? sampleFormatSize : byteShuffling);
+    if (compressionCodecOverride != CompressionCodec::None)
+    {
+        codec = compressionCodecOverride;
+        byteShuffling = sampleFormatSize;
+        compressLevel = compressionLevelOverride;
+    }
 
-    CompressionCodec useCodec = compressionCodecOverride != CompressionCodec::None ? compressionCodecOverride : codec;
-    int cLevel = compressionLevelOverride != -1 ? compressionLevelOverride : compressLevel;
-    switch(useCodec)
+    byteShuffle(tmp, byteShuffling);
+
+    switch(codec)
     {
     case None:
         data = tmp;
         break;
     case Zlib:
-        data = qCompress(tmp, cLevel);
+        data = qCompress(tmp, compressLevel);
         data.remove(0, sizeof(uint32_t));
         break;
     case LZ4:
@@ -224,10 +229,10 @@ void DataBlock::compress(int sampleFormatSize)
     {
         int compSize = 0;
         data.resize(LZ4_compressBound(tmp.size()));
-        if(useCodec == LZ4)
+        if(codec == LZ4)
             compSize = LZ4_compress_default(tmp.constData(), data.data(), tmp.size(), data.size());
         else
-            compSize = LZ4_compress_HC(tmp.constData(), data.data(), tmp.size(), data.size(), cLevel < 0 ? LZ4HC_CLEVEL_DEFAULT : cLevel);
+            compSize = LZ4_compress_HC(tmp.constData(), data.data(), tmp.size(), data.size(), compressLevel < 0 ? LZ4HC_CLEVEL_DEFAULT : compressLevel);
 
         if(compSize <= 0)
             throw Error("LZ4 compression failed");

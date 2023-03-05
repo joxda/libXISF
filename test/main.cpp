@@ -54,15 +54,18 @@ int main(int argc, char **argv)
             m(0, 2) = 2;
             m(1, 0) = 10;
             image.addProperty(Property("UI16Matrix", m));
+            std::tm tm = {12, 22, 23, 1, 2, 2023, 0, 0, 0, 0, 0};
+            image.addProperty(Property("TimeObs", tm));
             image.addFITSKeyword({"RA", "226.9751163116387", "Right ascension of the center of the image (deg)"});
             image.addFITSKeyword({"DEC", "62.02302376908295", "Declination of the center of the image (deg)"});
+            image.setCompression(DataBlock::Zlib, 9);
             writer.writeImage(image);
 
             image.setImageType(Image::Flat);
             image.setCompression(DataBlock::LZ4);
             image.setByteshuffling(true);
             writer.writeImage(image);
-            QByteArray data;
+            ByteArray data;
             std::cout << "Saving image" << std::endl;
             writer.save(data);
 
@@ -71,19 +74,19 @@ int main(int argc, char **argv)
             reader.open(data);
             const Image &img0 = reader.getImage(0);
             const Image &img1 = reader.getImage(1);
-            auto &prop0 = img0.imageProperties();
+
             TEST(image.imageProperties().size() != img0.imageProperties().size(), "Property count doesn't match");
-            //TEST(image.imageDataSize() != img0._dataBlock.data, "Images doesn't match");
-            //TEST(img0._dataBlock.data != img1._dataBlock.data, "Images doesn't match");
+            TEST(std::memcmp(image.imageData(), img0.imageData(), image.imageDataSize()), "Images doesn't match");
+            TEST(std::memcmp(image.imageData(), img1.imageData(), image.imageDataSize()), "Images doesn't match");
         }
-        else if(argc == 2 && argv[1] == QString("bench"))
+        else if(argc == 2 && std::strcmp(argv[1], "bench") == 0)
         {
             benchmark();
         }
         else
         {
             LibXISF::XISFReader reader;
-            reader.open(QString(argv[1]));
+            reader.open(argv[1]);
             TEST(reader.imagesCount() != 1, "No image");
 
             const LibXISF::Image &image = reader.getImage(0);

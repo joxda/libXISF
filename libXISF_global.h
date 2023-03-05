@@ -19,15 +19,21 @@
 #ifndef LIBXISF_GLOBAL_H
 #define LIBXISF_GLOBAL_H
 
-#include <QtCore/qglobal.h>
-
 #ifdef LIBXISF_STATIC_LIB
 #  define LIBXISF_EXPORT
 #else
 #  if defined(LIBXISF_LIBRARY)
-#    define LIBXISF_EXPORT Q_DECL_EXPORT
+#    ifdef WIN32
+#      define LIBXISF_EXPORT __declspec(dllexport)
+#    else
+#      define LIBXISF_EXPORT __attribute__((visibility("default")))
+#    endif
 #  else
-#    define LIBXISF_EXPORT Q_DECL_IMPORT
+#    ifdef WIN32
+#      define LIBXISF_EXPORT __declspec(dllimport)
+#    else
+#      define LIBXISF_EXPORT __attribute__((visibility("default")))
+#    endif
 #  endif
 #endif
 

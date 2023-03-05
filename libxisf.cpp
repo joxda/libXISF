@@ -20,116 +20,69 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <cstring>
-#include <QXmlStreamReader>
-#include <QDateTime>
-#include <QtEndian>
-#include <QElapsedTimer>
-#include <QFile>
-#include <QBuffer>
-#include <QProcessEnvironment>
+#include <iostream>
+#include <sstream>
+#include <cstdlib>
 #include "lz4/lz4.h"
 #include "lz4/lz4hc.h"
-
-#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
-template<> struct std::hash<QString>
-{
-    size_t operator()(const QString &string) const
-    {
-        return std::hash<std::string>{}(string.toStdString());
-    }
-};
-#endif
-namespace LibXISF
-{
-class MatrixConvert
-{
-    int _rows = 0;
-    int _cols = 0;
-    QByteArray _data;
-public:
-    const QByteArray& data() const
-    {
-        return _data;
-    }
-    int rows() const { return _rows; }
-    int cols() const { return _cols; }
-    MatrixConvert() = default;
-    MatrixConvert(int rows, int cols, const QByteArray &data) : _rows(rows), _cols(cols), _data(data) {}
-
-    template<typename T>
-    static Matrix<T> toMatrix(const MatrixConvert &m)
-    {
-        Matrix<T> matrix(m._rows, m._cols);
-        std::memcpy(&matrix._elem[0], m._data.constData(), m._data.size());
-        return matrix;
-    }
-    template<typename T>
-    static MatrixConvert fromMatrix(const Matrix<T> &m)
-    {
-        MatrixConvert mc;
-        mc._rows = m._rows;
-        mc._cols = m._cols;
-        mc._data = QByteArray((const char*)&m._elem[0], mc._rows * mc._cols * sizeof(T));
-        return mc;
-    }
-};
-}
-
-Q_DECLARE_METATYPE(LibXISF::MatrixConvert);
+#include "pugixml/pugixml.hpp"
+#include "zlib/zlib.h"
+#include "utils.h"
 
 namespace LibXISF
 {
 
-static std::unordered_map<QString, int> typeToId;
-static std::unordered_map<int, QString> idToType;
-static std::unordered_map<QString, Image::Type> imageTypeToEnum;
-static std::unordered_map<Image::Type, QString> imageTypeToString;
-static std::unordered_map<QString, Image::SampleFormat> sampleFormatToEnum;
-static std::unordered_map<Image::SampleFormat, QString> sampleFormatToString;
-static std::unordered_map<QString, Image::ColorSpace> colorSpaceToEnum;
-static std::unordered_map<Image::ColorSpace, QString> colorSpaceToString;
-static std::unordered_map<int, size_t> vectorTypeSizes;
-static std::unordered_map<int, size_t> matrixTypeSizes;
+void deserializeVariant(const pugi::xml_node &node, Variant &variant, const ByteArray &data);
+void serializeVariant(pugi::xml_node &node, const Variant &variant);
+
+static std::unordered_map<String, int> typeToId;
+static std::unordered_map<int, String> idToType;
+static std::unordered_map<String, Image::Type> imageTypeToEnum;
+static std::unordered_map<Image::Type, String> imageTypeToString;
+static std::unordered_map<String, Image::SampleFormat> sampleFormatToEnum;
+static std::unordered_map<Image::SampleFormat, String> sampleFormatToString;
+static std::unordered_map<String, Image::ColorSpace> colorSpaceToEnum;
+static std::unordered_map<Image::ColorSpace, String> colorSpaceToString;
 static DataBlock::CompressionCodec compressionCodecOverride = DataBlock::None;
 static bool byteShuffleOverride = false;
 static int compressionLevelOverride = -1;
 
-static const std::unordered_map<QString, std::pair<QString, int>> fitsNameToPropertyIdTypeConvert = {
-    {"OBSERVER", {"Observer:Name", QMetaType::QString}},
-    {"RADECSYS", {"Observation:CelestialReferenceSystem", QMetaType::QString}},
-    {"CRVAL1",   {"Observation:Center:Dec", QMetaType::Double}},
-    {"CRVAL2",   {"Observation:Center:RA", QMetaType::Double}},
-    {"CRPIX1",   {"Observation:Center:X", QMetaType::Double}},
-    {"CRPIX2",   {"Observation:Center:Y", QMetaType::Double}},
-    {"EQUINOX",  {"Observation:Equinox", QMetaType::Double}},
-    {"SITELAT",  {"Observation:Location:Latitude", QMetaType::Double}},
-    {"SITELONG", {"Observation:Location:Longitude", QMetaType::Double}},
-    {"OBJECT",   {"Observation:Object:Name", QMetaType::QString}},
-    {"DEC",      {"Observation:Object:Dec", QMetaType::Double}},
-    {"RA",       {"Observation:Object:RA", QMetaType::Double}},
-    {"DATE-OBS", {"Observation:Time:Start", QMetaType::QDateTime}},
-    {"DATE-END", {"Observation:Time:End", QMetaType::QDateTime}},
-    {"GAIN",     {"Instrument:Camera:Gain", QMetaType::Float}},
-    {"ISOSPEED", {"Instrument:Camera:ISOSpeed", QMetaType::Int}},
-    {"INSTRUME", {"Instrument:Camera:Name", QMetaType::QString}},
-    {"ROTATANG", {"Instrument:Camera:Rotation", QMetaType::Float}},
-    {"XBINNING", {"Instrument:Camera:XBinning", QMetaType::Int}},
-    {"YBINNING", {"Instrument:Camera:YBinning", QMetaType::Int}},
-    {"EXPTIME",  {"Instrument:ExposureTime", QMetaType::Float}},
-    {"FILTER",   {"Instrument:Filter:Name", QMetaType::QString}},
-    {"FOCUSPOS", {"Instrument:Focuser:Position", QMetaType::Float}},
-    {"CCD-TEMP", {"Instrument:Sensor:Temperature", QMetaType::Float}},
-    {"APTDIA",   {"Instrument:Telescope:Aperture", QMetaType::Float}},
-    {"FOCALLEN", {"Instrument:Telescope:FocalLength", QMetaType::Float}},
-    {"TELESCOP", {"Instrument:Telescope:Name", QMetaType::QString}},
+static const std::unordered_map<String, std::pair<String, Variant::Type>> fitsNameToPropertyIdTypeConvert = {
+    {"OBSERVER", {"Observer:Name", Variant::Type::String}},
+    {"RADECSYS", {"Observation:CelestialReferenceSystem", Variant::Type::String}},
+    {"CRVAL1",   {"Observation:Center:Dec", Variant::Type::Float64}},
+    {"CRVAL2",   {"Observation:Center:RA", Variant::Type::Float64}},
+    {"CRPIX1",   {"Observation:Center:X", Variant::Type::Float64}},
+    {"CRPIX2",   {"Observation:Center:Y", Variant::Type::Float64}},
+    {"EQUINOX",  {"Observation:Equinox", Variant::Type::Float64}},
+    {"SITELAT",  {"Observation:Location:Latitude", Variant::Type::Float64}},
+    {"SITELONG", {"Observation:Location:Longitude", Variant::Type::Float64}},
+    {"OBJECT",   {"Observation:Object:Name", Variant::Type::String}},
+    {"DEC",      {"Observation:Object:Dec", Variant::Type::Float64}},
+    {"RA",       {"Observation:Object:RA", Variant::Type::Float64}},
+    {"DATE-OBS", {"Observation:Time:Start", Variant::Type::TimePoint}},
+    {"DATE-END", {"Observation:Time:End", Variant::Type::TimePoint}},
+    {"GAIN",     {"Instrument:Camera:Gain", Variant::Type::Float32}},
+    {"ISOSPEED", {"Instrument:Camera:ISOSpeed", Variant::Type::Int32}},
+    {"INSTRUME", {"Instrument:Camera:Name", Variant::Type::String}},
+    {"ROTATANG", {"Instrument:Camera:Rotation", Variant::Type::Float32}},
+    {"XBINNING", {"Instrument:Camera:XBinning", Variant::Type::Int32}},
+    {"YBINNING", {"Instrument:Camera:YBinning", Variant::Type::Int32}},
+    {"EXPTIME",  {"Instrument:ExposureTime", Variant::Type::Float32}},
+    {"FILTER",   {"Instrument:Filter:Name", Variant::Type::String}},
+    {"FOCUSPOS", {"Instrument:Focuser:Position", Variant::Type::Float32}},
+    {"CCD-TEMP", {"Instrument:Sensor:Temperature", Variant::Type::Float32}},
+    {"APTDIA",   {"Instrument:Telescope:Aperture", Variant::Type::Float32}},
+    {"FOCALLEN", {"Instrument:Telescope:FocalLength", Variant::Type::Float32}},
+    {"TELESCOP", {"Instrument:Telescope:Name", Variant::Type::String}},
 };
 
-static void byteShuffle(QByteArray &data, int itemSize)
+static void byteShuffle(ByteArray &data, int itemSize)
 {
     if(itemSize > 1)
     {
-        QByteArray &input = data;
-        QByteArray output(input.size(), 0);
+        ByteArray &input = data;
+        ByteArray output(input.size());
         int num = input.size() / itemSize;
         char *s = output.data();
         for(int i=0; i<itemSize; i++)
@@ -143,12 +96,12 @@ static void byteShuffle(QByteArray &data, int itemSize)
     }
 }
 
-static void byteUnshuffle(QByteArray &data, int itemSize)
+static void byteUnshuffle(ByteArray &data, int itemSize)
 {
     if(itemSize > 1)
     {
-        QByteArray &input = data;
-        QByteArray output(input.size(), 0);
+        ByteArray &input = data;
+        ByteArray output(input.size());
         int num = input.size() / itemSize;
         const char *s = input.constData();
         for(int i=0; i<itemSize; i++)
@@ -162,31 +115,25 @@ static void byteUnshuffle(QByteArray &data, int itemSize)
     }
 }
 
-bool isString(QMetaType::Type type)
+void DataBlock::decompress(const ByteArray &input, const String &encoding)
 {
-    return type == QMetaType::QString;
-}
-
-void DataBlock::decompress(const QByteArray &input, const QString &encoding)
-{
-    QByteArray tmp = input;
+    ByteArray tmp = input;
 
     if(encoding == "base64")
-        tmp = QByteArray::fromBase64(tmp);
+        tmp.decode_base64();
     else if(encoding == "base16")
-        tmp = QByteArray::fromHex(tmp);
+        tmp.decode_hex();
 
     switch(codec)
     {
     case None:
-        data = tmp;
+        data = std::move(tmp);
         break;
     case Zlib:
     {
-        uint32_t size;
-        qToBigEndian<uint32_t>(uncompressedSize, &size);
-        tmp.prepend((char*)&size, sizeof(size));
-        data = qUncompress(tmp);
+        data.resize(uncompressedSize);
+        uint64_t size = uncompressedSize;
+        ::uncompress((Bytef*)data.data(), &size, (Bytef*)tmp.data(), tmp.size());
         break;
     }
     case LZ4:
@@ -203,7 +150,7 @@ void DataBlock::decompress(const QByteArray &input, const QString &encoding)
 
 void DataBlock::compress(int sampleFormatSize)
 {
-    QByteArray tmp = data;
+    ByteArray tmp = data;
     uncompressedSize = data.size();
 
     if (compressionCodecOverride != CompressionCodec::None)
@@ -221,9 +168,14 @@ void DataBlock::compress(int sampleFormatSize)
         data = tmp;
         break;
     case Zlib:
-        data = qCompress(tmp, compressLevel);
-        data.remove(0, sizeof(uint32_t));
+    {
+        data.resize(compressBound(uncompressedSize));
+        size_t compressedSize = data.size();
+        if(::compress2((Bytef*)data.data(), &compressedSize, (Bytef*)tmp.data(), tmp.size(), compressLevel) != Z_OK)
+            throw Error("Zlib compression failed");
+        data.resize(compressedSize);
         break;
+    }
     case LZ4:
     case LZ4HC:
     {
@@ -243,7 +195,7 @@ void DataBlock::compress(int sampleFormatSize)
     }
 }
 
-Property::Property(const QString &_id, const char *_value) :
+Property::Property(const String &_id, const char *_value) :
     id(_id),
     value(_value)
 {
@@ -394,13 +346,13 @@ void Image::addFITSKeyword(const FITSKeyword &keyword)
     _fitsKeywords.push_back(keyword);
 }
 
-bool Image::addFITSKeywordAsProperty(const QString &name, const QVariant &value)
+bool Image::addFITSKeywordAsProperty(const String &name, const Variant &value)
 {
     if(fitsNameToPropertyIdTypeConvert.count(name))
     {
         auto &c = fitsNameToPropertyIdTypeConvert.at(name);
         Property prop(c.first, value);
-        prop.value.convert(c.second);
+        //prop.value.convert(c.second);
         updateProperty(prop);
         return true;
     }
@@ -409,12 +361,12 @@ bool Image::addFITSKeywordAsProperty(const QString &name, const QVariant &value)
 
 void *Image::imageData()
 {
-    return _dataBlock.data.isNull() ? nullptr : _dataBlock.data.data();
+    return _dataBlock.data.size() ? _dataBlock.data.data() : nullptr;
 }
 
 const void *Image::imageData() const
 {
-    return _dataBlock.data.isNull() ? nullptr : _dataBlock.data.data();
+    return _dataBlock.data.size() ? _dataBlock.data.data() : nullptr;
 }
 
 size_t Image::imageDataSize() const
@@ -451,7 +403,7 @@ void Image::convertPixelStorageTo(PixelStorage storage)
         return;
     }
 
-    QByteArray tmp;
+    ByteArray tmp;
     tmp.resize(_dataBlock.data.size());
     size_t size = _width*_height;
 
@@ -490,49 +442,49 @@ void Image::convertPixelStorageTo(PixelStorage storage)
     _pixelStorage = storage;
 }
 
-Image::Type Image::imageTypeEnum(const QString &type)
+Image::Type Image::imageTypeEnum(const String &type)
 {
     auto t = imageTypeToEnum.find(type);
     return t != imageTypeToEnum.end() ? t->second : Image::Light;
 }
 
-QString Image::imageTypeString(Type type)
+String Image::imageTypeString(Type type)
 {
     auto t = imageTypeToString.find(type);
     return t != imageTypeToString.end() ? t->second : "Light";
 }
 
-Image::PixelStorage Image::pixelStorageEnum(const QString &storage)
+Image::PixelStorage Image::pixelStorageEnum(const String &storage)
 {
     if(storage == "Normal")return Image::Normal;
     return Image::Planar;
 }
 
-QString Image::pixelStorageString(PixelStorage storage)
+String Image::pixelStorageString(PixelStorage storage)
 {
     if(storage == Normal)return "Normal";
     return "Planar";
 }
 
-Image::SampleFormat Image::sampleFormatEnum(const QString &format)
+Image::SampleFormat Image::sampleFormatEnum(const String &format)
 {
     auto t = sampleFormatToEnum.find(format);
     return t != sampleFormatToEnum.end() ? t->second : Image::UInt16;
 }
 
-QString Image::sampleFormatString(SampleFormat format)
+String Image::sampleFormatString(SampleFormat format)
 {
     auto t = sampleFormatToString.find(format);
     return t != sampleFormatToString.end() ? t->second : "UInt16";
 }
 
-Image::ColorSpace Image::colorSpaceEnum(const QString &colorSpace)
+Image::ColorSpace Image::colorSpaceEnum(const String &colorSpace)
 {
     auto t = colorSpaceToEnum.find(colorSpace);
     return t != colorSpaceToEnum.end() ? t->second : Image::Gray;
 }
 
-QString Image::colorSpaceString(ColorSpace colorSpace)
+String Image::colorSpaceString(ColorSpace colorSpace)
 {
     auto t = colorSpaceToString.find(colorSpace);
     return t != colorSpaceToString.end() ? t->second : "Gray";
@@ -554,38 +506,33 @@ size_t Image::sampleFormatSize(SampleFormat sampleFormat)
     return sizeof(UInt16);
 }
 
-XISFReader::XISFReader()
+void XISFReader::open(const String &name)
 {
-    _xml = std::make_unique<QXmlStreamReader>();
+    close();
+    _io = std::make_unique<std::ifstream>(name.c_str(), std::ios_base::in | std::ios_base::binary);
+    readSignature();
+    readXISFHeader();
 }
 
-void XISFReader::open(const QString &name)
+void XISFReader::open(const ByteArray &data)
 {
-    QFile *fr = new QFile(name);
-    open(fr);
+    close();
+    std::string str((char*)data.data(), data.size());
+    _io = std::make_unique<std::istringstream>(str, std::ios_base::in | std::ios_base::binary);
+    readSignature();
+    readXISFHeader();
 }
 
-void XISFReader::open(const QByteArray &data)
-{
-    QBuffer *buffer = new QBuffer();
-    buffer->setData(data);
-    open(buffer);
-}
-
-void XISFReader::open(QIODevice *io)
+void XISFReader::open(std::istream *io)
 {
     close();
     _io.reset(io);
-    if(!_io->open(QIODevice::ReadOnly))
-        throw Error("Failed to open file");
-
     readSignature();
     readXISFHeader();
 }
 
 void XISFReader::close()
 {
-    _xml->clear();
     _io.reset();
     _images.clear();
     _properties.clear();
@@ -604,8 +551,10 @@ const Image& XISFReader::getImage(uint32_t n, bool readPixels)
     Image &img = _images[n];
     if(img._dataBlock.attachmentPos && readPixels)
     {
-        _io->seek(img._dataBlock.attachmentPos);
-        img._dataBlock.decompress(_io->read(img._dataBlock.attachmentSize));
+        _io->seekg(img._dataBlock.attachmentPos);
+        ByteArray data(img._dataBlock.attachmentSize);
+        _io->read(data.data(), data.size());
+        img._dataBlock.decompress(data);
     }
     return img;
 }
@@ -615,180 +564,68 @@ void XISFReader::readXISFHeader()
     uint32_t headerLen[2] = {0};
     _io->read((char*)&headerLen, sizeof(headerLen));
 
-    QByteArray xisfHeader = _io->read(headerLen[0]);
-    _xml->addData(xisfHeader);
+    ByteArray xisfHeader(headerLen[0]);
+    _io->read(xisfHeader.data(), headerLen[0]);
 
-    _xml->readNextStartElement();
+    pugi::xml_document doc;
+    doc.load_buffer(xisfHeader.data(), xisfHeader.size());
 
-    if(_xml->name() == "xisf" && _xml->attributes().value("version") == "1.0")
+    pugi::xml_node root = doc.child("xisf");
+
+    if(root && root.attribute("version").as_string() == std::string("1.0"))
     {
-        while(!_xml->atEnd())
-        {
-            if(!_xml->readNextStartElement())
-                break;
+        for(auto &image : root.children("Image"))
+            _images.push_back(parseImage(image));
 
-            if(_xml->name() == "Image")
-                readImageElement();
-            else if(_xml->name() == "Property")
-                _properties.push_back(readPropertyElement());
-        }
+        for(auto &property : root.children("Property"))
+            _properties.push_back(parseProperty(property));
     }
     else throw Error("Unknown root XML element");
-
-    if(_xml->hasError())
-        throw Error(_xml->errorString().toStdString());
 }
 
 void XISFReader::readSignature()
 {
     char signature[8];
-    if(_io->read(signature, sizeof(signature)) != sizeof(signature))
+    _io->read(signature, sizeof(signature));
+    if(_io->fail())
         throw Error("Failed to read from file");
 
     if(memcmp(signature, "XISF0100", sizeof(signature)) != 0)
         throw Error("Not valid XISF 1.0 file");
 }
 
-void XISFReader::readImageElement()
+void XISFReader::parseCompression(const pugi::xml_node &node, DataBlock &dataBlock)
 {
-    QXmlStreamAttributes attributes = _xml->attributes();
-
-    Image image;
-
-    QVector<QStringRef> geometry = attributes.value("geometry").split(":");
-    if(geometry.size() != 3)throw Error("We support only 2D images");
-    image._width = geometry[0].toULongLong();
-    image._height = geometry[1].toULongLong();
-    image._channelCount = geometry[2].toULongLong();
-    if(!image._width || !image._height || !image._channelCount)throw Error("Invalid image geometry");
-
-    QVector<QStringRef> bounds = attributes.value("bounds").split(":");
-    if(bounds.size() == 2)
+    std::vector<std::string> compression = split_string(node.attribute("compression").as_string(), ':');
+    if(compression.size() >= 2)
     {
-        image._bounds.first = bounds[0].toDouble();
-        image._bounds.second = bounds[1].toDouble();
-    }
-    image._imageType = Image::imageTypeEnum(attributes.value("imageType").toString());
-    image._pixelStorage = Image::pixelStorageEnum(attributes.value("pixelStorage").toString());
-    image._sampleFormat = Image::sampleFormatEnum(attributes.value("sampleFormat").toString());
-    image._colorSpace = Image::colorSpaceEnum(attributes.value("colorSpace").toString());
-
-    image._dataBlock = readDataBlock();
-
-    while(_xml->readNext() != QXmlStreamReader::EndElement || _xml->name() != "Image")
-    {
-        if(_xml->tokenType() == QXmlStreamReader::StartElement)
-        {
-            if(_xml->name() == "Property")
-                image.addProperty(readPropertyElement());
-            else if(_xml->name() == "FITSKeyword")
-                image._fitsKeywords.push_back(readFITSKeyword());
-            else if(_xml->name() == "ColorFilterArray")
-                image._cfa = readCFA();
-            else if(_xml->name() == "ICCProfile")
-            {
-                DataBlock icc = readDataBlock();
-                image._iccProfile = icc.data;
-            }
-            else
-                _xml->skipCurrentElement();
-        }
-        if(_xml->hasError())
-            throw Error("Error while reading XISF header");
-    }
-
-    _images.push_back(std::move(image));
-}
-
-Property XISFReader::readPropertyElement()
-{
-    QXmlStreamAttributes attributes = _xml->attributes();
-    Property property;
-    property.id = attributes.value("id").toString();
-    property.comment = attributes.value("comment").toString();
-
-    QString type = attributes.value("type").toString();
-    if(typeToId.count(type) == 0)
-        throw Error("Invalid type in property");
-
-    int typeId = typeToId[type];
-    QVariant value;
-
-    if(type == "String" && !attributes.hasAttribute("location"))
-    {
-        property.value = _xml->readElementText();
-    }
-    else if(attributes.hasAttribute("value"))
-    {
-        value = attributes.value("value").toString();
-        value.convert(typeId);
-        property.value = value;
-    }
-    else
-    {
-        DataBlock dataBlock = readDataBlock();
-        if(dataBlock.attachmentPos)
-        {
-            _io->seek(dataBlock.attachmentPos);
-            dataBlock.decompress(_io->read(dataBlock.attachmentSize));
-        }
-        if(vectorTypeSizes.count(typeId))
-        {
-            property.value = dataBlock.data;
-            if(!property.value.convert(typeId))
-                throw Error("Failed to convert vector property data");
-        }
-        else if(matrixTypeSizes.count(typeId))
-        {
-            bool ok1, ok2;
-            int rows = attributes.value("rows").toInt(&ok1);
-            int cols = attributes.value("columns").toInt(&ok2);
-            if(!ok1 || !ok2)
-                throw Error("Invalid rows and/or columns");
-
-            property.value = QVariant::fromValue<MatrixConvert>(MatrixConvert(rows, cols, dataBlock.data));
-            if(!property.value.convert(typeId))
-                throw Error("Failed to convert matrix property data");
-        }
+        if(compression[0].find("zlib") == 0)
+            dataBlock.codec = DataBlock::Zlib;
+        else if(compression[0].find("lz4hc") == 0)
+            dataBlock.codec = DataBlock::LZ4HC;
+        else if(compression[0].find("lz4") == 0)
+            dataBlock.codec = DataBlock::LZ4;
         else
+            throw Error("Unknown compression codec");
+
+        dataBlock.uncompressedSize = std::stoul(compression[1]);
+
+        if(compression[0].find("+sh") != std::string::npos)
         {
-            property.value = dataBlock.data;
+            if(compression.size() == 3)
+                dataBlock.byteShuffling = std::stoi(compression[2]);
+            else
+                throw Error("Missing byte shuffling size");
         }
     }
-
-    return property;
 }
 
-FITSKeyword XISFReader::readFITSKeyword()
-{
-    QXmlStreamAttributes attributes = _xml->attributes();
-    if(attributes.hasAttribute("name") && attributes.hasAttribute("value") && attributes.hasAttribute("comment"))
-        return { attributes.value("name").toString(), attributes.value("value").toString(), attributes.value("comment").toString() };
-    else
-        throw Error("Invalid FITSKeyword element");
-}
-
-void XISFReader::readDataElement(DataBlock &dataBlock)
-{
-    _xml->readNextStartElement();
-    if(_xml->name() == "Data")
-    {
-        readCompression(dataBlock);
-        QString encoding = _xml->attributes().value("encoding").toString();
-        QByteArray text = _xml->readElementText().toUtf8();
-        dataBlock.decompress(text, encoding);
-    }
-    else
-        throw Error("Unexpected XML element");
-}
-
-DataBlock XISFReader::readDataBlock()
+DataBlock XISFReader::parseDataBlock(const pugi::xml_node &node)
 {
     DataBlock dataBlock;
-    QXmlStreamAttributes attributes = _xml->attributes();
-    QVector<QStringRef> location = attributes.value("location").split(":");
+    std::vector<std::string> location = split_string(node.attribute("location").as_string(), ':');
 
-    readCompression(dataBlock);
+    parseCompression(node, dataBlock);
 
     if(location.size() && location[0] == "embedded")
     {
@@ -796,15 +633,13 @@ DataBlock XISFReader::readDataBlock()
     }
     else if(location.size() >= 2 && location[0] == "inline")
     {
-        QByteArray text = _xml->readElementText().toUtf8();
-        dataBlock.decompress(text, location[1].toString());
+        ByteArray text(node.text().as_string());
+        dataBlock.decompress(text, location[1]);
     }
     else if(location.size() >= 3 && location[0] == "attachment")
     {
-        bool ok1, ok2;
-        dataBlock.attachmentPos = location[1].toULongLong(&ok1);
-        dataBlock.attachmentSize = location[2].toULongLong(&ok2);
-        if(!ok1 || !ok2)throw Error("Invalid attachment");
+        dataBlock.attachmentPos = std::stoul(location[1]);
+        dataBlock.attachmentSize = std::stoul(location[2]);
     }
     else
     {
@@ -812,46 +647,67 @@ DataBlock XISFReader::readDataBlock()
     }
 
     if(dataBlock.embedded)
-        readDataElement(dataBlock);
+    {
+        auto dataNode = node.child("Data");
+        if(dataNode)
+        {
+            parseCompression(dataNode, dataBlock);
+            String encoding = dataNode.attribute("encoding").as_string();
+            ByteArray text(dataNode.text().as_string());
+            dataBlock.decompress(text, encoding);
+        }
+        else
+            throw Error("Unexpected XML element");
+    }
 
     return dataBlock;
 }
 
-void XISFReader::readCompression(DataBlock &dataBlock)
+Property XISFReader::parseProperty(const pugi::xml_node &node)
 {
-    QVector<QStringRef> compression = _xml->attributes().value("compression").split(":");
-    if(compression.size() >= 2)
+    Property property;
+
+    property.id = node.attribute("id").as_string();
+    property.comment = node.attribute("comment").as_string();
+    ByteArray data;
+    if(node.attribute("location"))
     {
-        if(compression[0].startsWith("zlib"))
-            dataBlock.codec = DataBlock::Zlib;
-        else if(compression[0].startsWith("lz4hc"))
-            dataBlock.codec = DataBlock::LZ4HC;
-        else if(compression[0].startsWith("lz4"))
-            dataBlock.codec = DataBlock::LZ4;
-        else
-            throw Error("Unknown compression codec");
-
-        dataBlock.uncompressedSize = compression[1].toULongLong();
-
-        if(compression[0].endsWith("+sh"))
+        DataBlock dataBlock = parseDataBlock(node);
+        if(dataBlock.attachmentPos)
         {
-            if(compression.size() == 3)
-                dataBlock.byteShuffling = compression[2].toInt();
-            else
-                throw Error("Missing byte shuffling size");
+            data.resize(dataBlock.attachmentSize);
+            _io->seekg(dataBlock.attachmentPos);
+            _io->read(data.data(), dataBlock.attachmentSize);
+            dataBlock.decompress(data);
+        }
+        else
+        {
+            data = dataBlock.data;
         }
     }
+
+    deserializeVariant(node, property.value, data);
+
+    return property;
 }
 
-ColorFilterArray XISFReader::readCFA()
+FITSKeyword XISFReader::parseFITSKeyword(const pugi::xml_node &node)
+{
+    FITSKeyword fitsKeyword;
+    fitsKeyword.name = node.attribute("name").as_string();
+    fitsKeyword.value = node.attribute("value").as_string();
+    fitsKeyword.comment = node.attribute("comment").as_string();
+    return fitsKeyword;
+}
+
+ColorFilterArray XISFReader::parseCFA(const pugi::xml_node &node)
 {
     ColorFilterArray cfa;
-    QXmlStreamAttributes attributes = _xml->attributes();
-    if(attributes.hasAttribute("pattern") && attributes.hasAttribute("width") && attributes.hasAttribute("height"))
+    if(node.attribute("pattern") && node.attribute("width") && node.attribute("height"))
     {
-        cfa.pattern = attributes.value("pattern").toString();
-        cfa.width = attributes.value("width").toInt();
-        cfa.height = attributes.value("height").toInt();
+        cfa.pattern = node.attribute("pattern").as_string();
+        cfa.width = node.attribute("width").as_int();
+        cfa.height = node.attribute("height").as_int();
     }
     else
     {
@@ -860,38 +716,76 @@ ColorFilterArray XISFReader::readCFA()
     return cfa;
 }
 
-XISFWriter::XISFWriter()
+Image XISFReader::parseImage(const pugi::xml_node &node)
 {
-    _xml = std::make_unique<QXmlStreamWriter>();
-    //_xml->setAutoFormatting(true);
+    Image image;
+
+    std::vector<std::string> geometry = split_string(node.attribute("geometry").as_string(), ':');
+    if(geometry.size() != 3)throw Error("We support only 2D images");
+    image._width = std::stoul(geometry[0]);
+    image._height = std::stoul(geometry[1]);
+    image._channelCount = std::stoul(geometry[2]);
+    if(!image._width || !image._height || !image._channelCount)throw Error("Invalid image geometry");
+
+    std::vector<std::string> bounds = split_string(node.attribute("bounds").as_string(), ':');
+    if(bounds.size() == 2)
+    {
+        image._bounds.first = std::stod(bounds[0]);
+        image._bounds.second = std::stod(bounds[1]);
+    }
+    image._imageType = Image::imageTypeEnum(node.attribute("imageType").as_string());
+    image._pixelStorage = Image::pixelStorageEnum(node.attribute("pixelStorage").as_string());
+    image._sampleFormat = Image::sampleFormatEnum(node.attribute("sampleFormat").as_string());
+    image._colorSpace = Image::colorSpaceEnum(node.attribute("colorSpace").as_string());
+
+    image._dataBlock = parseDataBlock(node);
+
+    for(auto &property : node.children("Property"))
+        image._properties.push_back(parseProperty(property));
+
+    for(auto &fitsKeyword : node.children("FITSKeyword"))
+        image._fitsKeywords.push_back(parseFITSKeyword(fitsKeyword));
+
+    if(node.child("ColorFilterArray"))
+        image._cfa = parseCFA(node.child("ColorFilterArray"));
+
+    if(node.child("ICCProfile"))
+    {
+        DataBlock icc = parseDataBlock(node.child("ICCProfile"));
+        image._iccProfile = icc.data;
+    }
+
+    return image;
 }
 
-void XISFWriter::save(const QString &name)
-{
-    QFile fw(name);
 
-    if(!fw.open(QIODevice::WriteOnly))
+void XISFWriter::save(const String &name)
+{
+    std::ofstream fw(name.c_str(), std::ios_base::out | std::ios_base::binary);
+
+    if(fw.fail())
         throw Error("Failed to open file");
 
     save(fw);
 }
 
-void XISFWriter::save(QByteArray &data)
+void XISFWriter::save(ByteArray &data)
 {
-    QBuffer buffer(&data);
-    buffer.open(QIODevice::WriteOnly);
-    save(buffer);
+    std::ostringstream oss;
+    save(oss);
+    std::string str = oss.str();
+    data = ByteArray(str.data(), str.size());
 }
 
-void XISFWriter::save(QIODevice &io)
+void XISFWriter::save(std::ostream &io)
 {
     writeHeader();
 
-    io.write(_xisfHeader);
+    io.write(_xisfHeader.constData(), _xisfHeader.size());
 
     for(auto &image : _images)
     {
-        io.write(image._dataBlock.data);
+        io.write(image._dataBlock.data.constData(), image._dataBlock.data.size());
     }
 }
 
@@ -905,99 +799,105 @@ void XISFWriter::writeImage(const Image &image)
 void XISFWriter::writeHeader()
 {
     const char signature[16] = {'X', 'I', 'S', 'F', '0', '1', '0', '0', 0, 0, 0, 0, 0, 0, 0, 0};
-    QBuffer buffer(&_xisfHeader);
-    buffer.open(QIODevice::WriteOnly);
-    buffer.write(signature, sizeof(signature));
 
-    _xml->setDevice(&buffer);
+    pugi::xml_document doc;
+    doc.append_child(pugi::node_comment).set_value("\nExtensible Image Serialization Format - XISF version 1.0\nCreated with libXISF - https://nouspiro.space\n");
 
-    _xml->writeStartDocument();
-    _xml->writeComment("\nExtensible Image Serialization Format - XISF version 1.0\nCreated with libXISF - https://nouspiro.space\n");
-    _xml->writeStartElement("xisf");
-    _xml->writeAttribute("version", "1.0");
-    _xml->writeDefaultNamespace("http://www.pixinsight.com/xisf");
-    _xml->writeNamespace("http://www.w3.org/2001/XMLSchema-instance", "xsi");
-    _xml->writeAttribute("http://www.w3.org/2001/XMLSchema-instance", "schemaLocation", "http://www.pixinsight.com/xisf http://pixinsight.com/xisf/xisf-1.0.xsd");
+    pugi::xml_node root = doc.append_child("xisf");
+    root.append_attribute("version").set_value("1.0");
+    root.append_attribute("xmlns").set_value("http://www.pixinsight.com/xisf");
+    root.append_attribute("xmlns:xsi").set_value("http://www.w3.org/2001/XMLSchema-instance");
+    root.append_attribute("xsi:schemaLocation").set_value("http://www.pixinsight.com/xisf http://pixinsight.com/xisf/xisf-1.0.xsd");
 
     for(Image &image : _images)
     {
-        writeImageElement(image);
+        writeImageElement(root, image);
     }
 
-    writeMetadata();
+    writeMetadata(root);
 
-    _xml->writeEndElement();
-    _xml->writeEndDocument();
+    std::stringstream xml;
+    xml.write(signature, sizeof(signature));
+    doc.save(xml, "", pugi::format_raw);
 
-    uint32_t size = _xisfHeader.size();
+    std::string header = xml.str();
+    uint32_t size = header.size();
 
     uint32_t offset = 0;
-    const char replace[] = "attachment:2147483648";
+    std::string replace = "attachment:2147483648";
     for(auto &image : _images)
     {
-        QByteArray blockPos = QByteArray("attachment:") + QByteArray::number(size + offset);
-        _xisfHeader.replace(_xisfHeader.indexOf(replace), sizeof(replace) - 1, blockPos);
+        std::string blockPos = std::string("attachment:") + std::to_string(size + offset);
+        size_t pos = header.find(replace, 32);
+        header.replace(pos, replace.size(), blockPos);
         offset += image._dataBlock.data.size();
     }
 
-    uint32_t headerSize = _xisfHeader.size() - sizeof(signature);
-    _xisfHeader.append(size - _xisfHeader.size(), '\0');
+    uint32_t headerSize = size - sizeof(signature);
+    header.resize(size, 0);
+    header.replace(8, sizeof(uint32_t), (const char*)&headerSize, sizeof(uint32_t));
 
-    buffer.seek(8);
-    buffer.write((char*)&headerSize, sizeof(size));
-
-    if(_xml->hasError())
-        throw Error("Failed to write XML header");
+    _xisfHeader = ByteArray(header.c_str(), header.size());
 }
 
-void XISFWriter::writeImageElement(const Image &image)
+void XISFWriter::writeImageElement(pugi::xml_node &node, const Image &image)
 {
-    _xml->writeStartElement("Image");
-    _xml->writeAttribute("geometry", QString("%1:%2:%3").arg(image._width).arg(image._height).arg(image._channelCount));
-    _xml->writeAttribute("sampleFormat", Image::sampleFormatString(image._sampleFormat));
-    _xml->writeAttribute("colorSpace", Image::colorSpaceString(image._colorSpace));
-    _xml->writeAttribute("imageType", Image::imageTypeString(image._imageType));
-    _xml->writeAttribute("pixelStorage", Image::pixelStorageString(image._pixelStorage));
+    pugi::xml_node image_node = node.append_child("Image");
+    std::string geometry = std::to_string(image._width) + ":" + std::to_string(image._height) + ":" + std::to_string(image._channelCount);
+    image_node.append_attribute("geometry").set_value(geometry.c_str());
+    image_node.append_attribute("sampleFormat").set_value(Image::sampleFormatString(image._sampleFormat).c_str());
+    image_node.append_attribute("colorSpace").set_value(Image::colorSpaceString(image._colorSpace).c_str());
+    image_node.append_attribute("imageType").set_value(Image::imageTypeString(image._imageType).c_str());
+    image_node.append_attribute("pixelStorage").set_value(Image::pixelStorageString(image._pixelStorage).c_str());
     if((image._sampleFormat == Image::Float32 || image._sampleFormat == Image::Float64) ||
             image._bounds.first != 0.0 || image._bounds.second != 1.0)
     {
-        _xml->writeAttribute("bounds", QString("%1:%2").arg(image._bounds.first).arg(image._bounds.second));
+        std::string bounds = std::to_string(image._bounds.first) + ":" + std::to_string(image._bounds.second);
+        image_node.append_attribute("bounds").set_value(bounds.c_str());
     }
 
-    writeDataBlockAttributes(image._dataBlock);
+    writeDataBlockAttributes(image_node, image._dataBlock);
     for(auto &property : image._properties)
-        writePropertyElement(property);
+        writePropertyElement(image_node, property);
 
     for(auto &fitsKeyword : image._fitsKeywords)
-        writeFITSKeyword(fitsKeyword);
+        writeFITSKeyword(image_node, fitsKeyword);
 
-    writeCFA(image);
-    writeICC(image._iccProfile);
+    if(image._cfa.width && image._cfa.height)
+    {
+        pugi::xml_node cfa_node = node.append_child("ColorFilterArray");
+        cfa_node.append_attribute("pattern").set_value(image._cfa.pattern.c_str());
+        cfa_node.append_attribute("width").set_value(image._cfa.width);
+        cfa_node.append_attribute("height").set_value(image._cfa.height);
+    }
 
-    _xml->writeEndElement();
+    if(image._iccProfile.size())
+    {
+        ByteArray base64 = image._iccProfile;
+        base64.decode_base64();
+        pugi::xml_node icc_node = image_node.append_child("ICCProfile");
+        icc_node.append_attribute("location").set_value("inline:base64");
+        icc_node.append_child(pugi::node_pcdata).set_value(base64.data());
+    }
 }
 
-void XISFWriter::writeDataBlockAttributes(const DataBlock &dataBlock)
+void XISFWriter::writeDataBlockAttributes(pugi::xml_node &image_node, const DataBlock &dataBlock)
 {
-    writeCompressionAttributes(dataBlock);
-
     if(dataBlock.embedded)
     {
-        _xml->writeAttribute("location", "embedded");
+        image_node.append_attribute("location").set_value("embedded");
     }
     else if(dataBlock.attachmentPos == 0)
     {
-        _xml->writeAttribute("location", QString("inline:base64"));
+        image_node.append_attribute("location").set_value("inline:base64");
     }
     else
     {
-        _xml->writeAttribute("location", QString("attachment:2147483648:%1").arg(dataBlock.data.size()));
+        std::string attachment = "attachment:2147483648:" + std::to_string(dataBlock.data.size());
+        image_node.append_attribute("location").set_value(attachment.c_str());
     }
-}
 
-void XISFWriter::writeCompressionAttributes(const DataBlock &dataBlock)
-{
-    QString codec;
+    std::string codec;
 
     if(dataBlock.codec == DataBlock::Zlib)
         codec = "zlib";
@@ -1009,160 +909,50 @@ void XISFWriter::writeCompressionAttributes(const DataBlock &dataBlock)
     if(dataBlock.byteShuffling > 1)
         codec += "+sh";
 
-    if(!codec.isEmpty())
+    if(!codec.empty())
     {
-        codec += QString(":%1").arg(dataBlock.uncompressedSize);
+        codec += ":" + std::to_string(dataBlock.uncompressedSize);
         if(dataBlock.byteShuffling > 1)
-            codec += QString(":%1").arg(dataBlock.byteShuffling);
+            codec += ":" + std::to_string(dataBlock.byteShuffling);
 
-        _xml->writeAttribute("compression", codec);
+        image_node.append_attribute("compression").set_value(codec.c_str());
     }
 }
 
-void XISFWriter::writePropertyElement(const Property &property)
+void XISFWriter::writePropertyElement(pugi::xml_node &node, const Property &property)
 {
-    int type = property.value.userType();
+    pugi::xml_node property_node = node.append_child("Property");
+    property_node.append_attribute("id").set_value(property.id.c_str());
 
-    _xml->writeStartElement("Property");
-    _xml->writeAttribute("id", property.id);
-    _xml->writeAttribute("type", idToType[type]);
+    serializeVariant(property_node, property.value);
 
-    if(!property.comment.isEmpty())
-        _xml->writeAttribute("comment", property.comment);
-
-    if(type == QMetaType::QString)
-        _xml->writeCharacters(property.value.toString());
-    else if(type == QMetaType::Bool)
-        _xml->writeAttribute("value", property.value.toBool() ? "1" : "0");
-    else if(type == QMetaType::SChar || type == QMetaType::UChar)
-        _xml->writeAttribute("value", QString::number(property.value.toInt()));
-    else if(vectorTypeSizes.count(type))
-    {
-        DataBlock dataBlock;
-        dataBlock.data = property.value.toByteArray();
-        writeDataBlockAttributes(dataBlock);
-        _xml->writeAttribute("length", QString::number(dataBlock.data.size() / vectorTypeSizes[type]));
-        _xml->writeCharacters(dataBlock.data.toBase64());
-    }
-    else if(matrixTypeSizes.count(type))
-    {
-        MatrixConvert mc = property.value.value<MatrixConvert>();
-        DataBlock dataBlock;
-        dataBlock.data = mc.data();
-        writeDataBlockAttributes(dataBlock);
-        _xml->writeAttribute("rows", QString::number(mc.rows()));
-        _xml->writeAttribute("columns", QString::number(mc.cols()));
-        _xml->writeCharacters(dataBlock.data.toBase64());
-    }
-    else
-        _xml->writeAttribute("value", property.value.toString());
-    _xml->writeEndElement();
-    if(_xml->hasError())
-        throw Error("Failed to write property");
+    if(!property.comment.empty())
+        property_node.append_attribute("comment").set_value(property.comment.c_str());
 }
 
-void XISFWriter::writeFITSKeyword(const FITSKeyword &keyword)
+void XISFWriter::writeFITSKeyword(pugi::xml_node &node, const FITSKeyword &keyword)
 {
-    _xml->writeEmptyElement("FITSKeyword");
-    _xml->writeAttribute("name", keyword.name);
-    _xml->writeAttribute("value", keyword.value);
-    _xml->writeAttribute("comment", keyword.comment);
-    if(_xml->hasError())
-        throw Error("Failed to write FITS keyword");
+    pugi::xml_node fits_node = node.append_child("FITSKeyword");
+    fits_node.append_attribute("name").set_value(keyword.name.c_str());
+    fits_node.append_attribute("value").set_value(keyword.value.c_str());
+    fits_node.append_attribute("comment").set_value(keyword.comment.c_str());
 }
 
-void XISFWriter::writeMetadata()
+void XISFWriter::writeMetadata(pugi::xml_node &node)
 {
-    _xml->writeStartElement("Metadata");
-    writePropertyElement(Property("XISF:CreationTime", QDateTime::currentDateTimeUtc().toString(Qt::ISODate)));
-    writePropertyElement(Property("XISF:CreatorApplication", "LibXISF"));
-    _xml->writeEndElement();
+    pugi::xml_node metadata = node.append_child("Metadata");
+    std::time_t t = std::time(nullptr);
+    std::tm tm = *std::gmtime(&t);
+    writePropertyElement(metadata, Property("XISF:CreationTime", tm));
+    writePropertyElement(metadata, Property("XISF:CreatorApplication", "LibXISF"));
 }
-
-void XISFWriter::writeCFA(const Image &image)
-{
-    if(image._cfa.width && image._cfa.height)
-    {
-        _xml->writeEmptyElement("ColorFilterArray");
-        _xml->writeAttribute("pattern", image._cfa.pattern);
-        _xml->writeAttribute("width", QString::number(image._cfa.width));
-        _xml->writeAttribute("height", QString::number(image._cfa.height));
-    }
-}
-
-void XISFWriter::writeICC(const QByteArray &icc)
-{
-    if(!icc.isEmpty())
-    {
-        QByteArray base64 = icc.toBase64();
-        _xml->writeStartElement("ICCProfile");
-        _xml->writeAttribute("location", "inline:base64");
-        _xml->writeCharacters(base64);
-    }
-}
-
-#define REGISTER_METATYPE(type) { int id = qMetaTypeId<type>(); \
-    typeToId.insert({#type, id}); idToType.insert({id, #type}); }
 
 #define STRING_ENUM(map, map2, c, e) { map.insert({#e, c::e}); map2.insert({c::e, #e}); }
-
-#define REGISTER_VECTOR_TYPE(type) { vectorTypeSizes.insert({typeToId[#type], sizeof(type::value_type)});   \
-    QMetaType::registerConverter<type, QByteArray>([](const type &v) {                                      \
-        return QByteArray((const char*)&v[0], v.size() * sizeof(type::value_type));                         \
-    });                                                                                                     \
-    QMetaType::registerConverter<QByteArray, type>([](const QByteArray &v) {                                \
-        type t(v.size() / sizeof(type::value_type));  std::memcpy(&t[0], v.constData(), v.size());          \
-        return t;                                                                                           \
-    }); }
-
-#define REGISTER_MATRIX_TYPE(type, mtype) { matrixTypeSizes.insert({typeToId[#type], sizeof(mtype)});       \
-    QMetaType::registerConverter<type, MatrixConvert>(MatrixConvert::fromMatrix<mtype>);                    \
-    QMetaType::registerConverter<MatrixConvert, type>(MatrixConvert::toMatrix<mtype>);}
 
 struct Init
 {
     Init()
     {
-        REGISTER_METATYPE(Boolean);
-        REGISTER_METATYPE(Int8);
-        REGISTER_METATYPE(UInt8);
-        REGISTER_METATYPE(Int16);
-        REGISTER_METATYPE(UInt16);
-        REGISTER_METATYPE(Int32);
-        REGISTER_METATYPE(UInt32);
-        REGISTER_METATYPE(Int64);
-        REGISTER_METATYPE(UInt64);
-        REGISTER_METATYPE(Float32);
-        REGISTER_METATYPE(Float64);
-        REGISTER_METATYPE(Complex32);
-        REGISTER_METATYPE(Complex64);
-        REGISTER_METATYPE(TimePoint);
-        REGISTER_METATYPE(I8Vector);
-        REGISTER_METATYPE(UI8Vector);
-        REGISTER_METATYPE(I16Vector);
-        REGISTER_METATYPE(UI16Vector);
-        REGISTER_METATYPE(I32Vector);
-        REGISTER_METATYPE(UI32Vector);
-        REGISTER_METATYPE(I64Vector);
-        REGISTER_METATYPE(UI64Vector);
-        REGISTER_METATYPE(F32Vector);
-        REGISTER_METATYPE(F64Vector);
-        REGISTER_METATYPE(C32Vector);
-        REGISTER_METATYPE(C64Vector);
-        REGISTER_METATYPE(I8Matrix);
-        REGISTER_METATYPE(UI8Matrix);
-        REGISTER_METATYPE(I16Matrix);
-        REGISTER_METATYPE(UI16Matrix);
-        REGISTER_METATYPE(I32Matrix);
-        REGISTER_METATYPE(UI32Matrix);
-        REGISTER_METATYPE(I64Matrix);
-        REGISTER_METATYPE(UI64Matrix);
-        REGISTER_METATYPE(F32Matrix);
-        REGISTER_METATYPE(F64Matrix);
-        REGISTER_METATYPE(C32Matrix);
-        REGISTER_METATYPE(C64Matrix);
-        REGISTER_METATYPE(String);
-
         STRING_ENUM(imageTypeToEnum, imageTypeToString, Image, Bias);
         STRING_ENUM(imageTypeToEnum, imageTypeToString, Image, Dark);
         STRING_ENUM(imageTypeToEnum, imageTypeToString, Image, Flat);
@@ -1191,72 +981,25 @@ struct Init
         STRING_ENUM(colorSpaceToEnum, colorSpaceToString, Image, RGB);
         STRING_ENUM(colorSpaceToEnum, colorSpaceToString, Image, CIELab);
 
-        REGISTER_VECTOR_TYPE(I8Vector);
-        REGISTER_VECTOR_TYPE(UI8Vector);
-        REGISTER_VECTOR_TYPE(I16Vector);
-        REGISTER_VECTOR_TYPE(UI16Vector);
-        REGISTER_VECTOR_TYPE(I32Vector);
-        REGISTER_VECTOR_TYPE(UI32Vector);
-        REGISTER_VECTOR_TYPE(I64Vector);
-        REGISTER_VECTOR_TYPE(UI64Vector);
-        REGISTER_VECTOR_TYPE(F32Vector);
-        REGISTER_VECTOR_TYPE(F64Vector);
-        REGISTER_VECTOR_TYPE(C32Vector);
-        REGISTER_VECTOR_TYPE(C64Vector);
-
-        REGISTER_MATRIX_TYPE(I8Matrix, Int8);
-        REGISTER_MATRIX_TYPE(UI8Matrix, UInt8);
-        REGISTER_MATRIX_TYPE(I16Matrix, Int16);
-        REGISTER_MATRIX_TYPE(UI16Matrix, UInt16);
-        REGISTER_MATRIX_TYPE(I32Matrix, Int32);
-        REGISTER_MATRIX_TYPE(UI32Matrix, UInt32);
-        REGISTER_MATRIX_TYPE(I64Matrix, Int64);
-        REGISTER_MATRIX_TYPE(UI64Matrix, UInt64);
-        REGISTER_MATRIX_TYPE(F32Matrix, Float32);
-        REGISTER_MATRIX_TYPE(F64Matrix, Float64);
-        REGISTER_MATRIX_TYPE(C32Matrix, Complex32);
-        REGISTER_MATRIX_TYPE(C64Matrix, Complex64);
-
-        QMetaType::registerConverter<Complex32, QString>([](const Complex32 &c){ return QString("(%1,%2)").arg(c.real).arg(c.imag); });
-        QMetaType::registerConverter<Complex64, QString>([](const Complex64 &c){ return QString("(%1,%2)").arg(c.real).arg(c.imag); });
-        QMetaType::registerConverter<QString, Complex32>([](QString s)
+        const char *compression_env = std::getenv("LIBXISF_COMPRESSION");
+        if(compression_env)
         {
-            Complex32 c;
-            s.remove('(');
-            s.remove(')');
-            int comma = s.indexOf(',');
-            c.real = s.leftRef(comma).toFloat();
-            c.imag = s.rightRef(comma+1).toFloat();
-            return c;
-        });
-        QMetaType::registerConverter<QString, Complex64>([](QString s)
-        {
-            Complex64 c;
-            s.remove('(');
-            s.remove(')');
-            int comma = s.indexOf(',');
-            c.real = s.leftRef(comma).toDouble();
-            c.imag = s.rightRef(comma+1).toDouble();
-            return c;
-        });
-
-        QString compression = QProcessEnvironment::systemEnvironment().value("LIBXISF_COMPRESSION");
-        if(!compression.isEmpty())
-        {
-            if(compression.startsWith("zlib"))
+            std::string compression = compression_env;
+            if(compression.find("zlib") == 0)
                 compressionCodecOverride = DataBlock::Zlib;
-            else if(compression.startsWith("lz4hc"))
+            else if(compression.find("lz4hc") == 0)
                 compressionCodecOverride = DataBlock::LZ4HC;
-            else if(compression.startsWith("lz4"))
+            else if(compression.find("lz4") == 0)
                 compressionCodecOverride = DataBlock::LZ4;
 
-            if(compression.contains("+sh"))
+            if(compression.find("+sh") != std::string::npos)
                 byteShuffleOverride = true;
 
-            int index = compression.lastIndexOf(":");
+            int index = compression.find_last_of(":");
             if(index > 0)
             {
-                compressionLevelOverride = compression.mid(index+1).toInt();
+                try { compressionLevelOverride = std::stoi(compression.substr(index + 1)); }
+                catch(...) { /* do nothing */ }
             }
         }
     }

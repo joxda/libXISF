@@ -1,9 +1,24 @@
 #include <iostream>
 #include <random>
-#include <QElapsedTimer>
+#include <chrono>
 #include "libxisf.h"
 
 using namespace LibXISF;
+
+class Timer
+{
+    std::chrono::high_resolution_clock clock;
+    std::chrono::high_resolution_clock::time_point startTime;
+public:
+    void start()
+    {
+        startTime = clock.now();
+    }
+    uint64_t elapsed()
+    {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(clock.now() - startTime).count();
+    }
+};
 
 template<typename T>
 void benchmarkType(float avg, float stdDev)
@@ -20,14 +35,14 @@ void benchmarkType(float avg, float stdDev)
         ptr[i] = normalDist(gen);
     }
 
-    QElapsedTimer timer;
+    Timer timer;
     double baseSize;
 
     {
         timer.start();
         XISFWriter writer;
         writer.writeImage(image);
-        QByteArray xisfImage;
+        ByteArray xisfImage;
         writer.save(xisfImage);
         baseSize = xisfImage.size();
         std::cout << "No compression      \tElapsed time: " << timer.elapsed() << " " << "ms\tSpeed: "
@@ -38,7 +53,7 @@ void benchmarkType(float avg, float stdDev)
         timer.start();
         XISFWriter writer;
         writer.writeImage(image);
-        QByteArray xisfImage;
+        ByteArray xisfImage;
         writer.save(xisfImage);
         std::cout << "Zlib compression    \tElapsed time: " << timer.elapsed() << " " << "ms\tSpeed: "
                   << size/1024.0/1.024/timer.elapsed() << "MiB/s\tRatio: " << baseSize/xisfImage.size() << std::endl;
@@ -48,7 +63,7 @@ void benchmarkType(float avg, float stdDev)
         timer.start();
         XISFWriter writer;
         writer.writeImage(image);
-        QByteArray xisfImage;
+        ByteArray xisfImage;
         writer.save(xisfImage);
         std::cout << "LZ4 compression     \tElapsed time: " << timer.elapsed() << " " << "ms\tSpeed: "
                   << size/1024.0/1.024/timer.elapsed() << "MiB/s\tRatio: " << baseSize/xisfImage.size() << std::endl;
@@ -58,7 +73,7 @@ void benchmarkType(float avg, float stdDev)
         timer.start();
         XISFWriter writer;
         writer.writeImage(image);
-        QByteArray xisfImage;
+        ByteArray xisfImage;
         writer.save(xisfImage);
         std::cout << "LZ4HC compression   \tElapsed time: " << timer.elapsed() << " " << "ms\tSpeed: "
                   << size/1024.0/1.024/timer.elapsed() << "MiB/s\tRatio: " << baseSize/xisfImage.size() << std::endl;
@@ -69,7 +84,7 @@ void benchmarkType(float avg, float stdDev)
         timer.start();
         XISFWriter writer;
         writer.writeImage(image);
-        QByteArray xisfImage;
+        ByteArray xisfImage;
         writer.save(xisfImage);
         std::cout << "Zlib compression SH \tElapsed time: " << timer.elapsed() << " " << "ms\tSpeed: "
                   << size/1024.0/1.024/timer.elapsed() << "MiB/s\tRatio: " << baseSize/xisfImage.size() << std::endl;
@@ -79,7 +94,7 @@ void benchmarkType(float avg, float stdDev)
         timer.start();
         XISFWriter writer;
         writer.writeImage(image);
-        QByteArray xisfImage;
+        ByteArray xisfImage;
         writer.save(xisfImage);
         std::cout << "LZ4 compression SH  \tElapsed time: " << timer.elapsed() << " " << "ms\tSpeed: "
                   << size/1024.0/1.024/timer.elapsed() << "MiB/s\tRatio: " << baseSize/xisfImage.size() << std::endl;
@@ -89,7 +104,7 @@ void benchmarkType(float avg, float stdDev)
         timer.start();
         XISFWriter writer;
         writer.writeImage(image);
-        QByteArray xisfImage;
+        ByteArray xisfImage;
         writer.save(xisfImage);
         std::cout << "LZ4HC compression SH\tElapsed time: " << timer.elapsed() << " " << "ms\tSpeed: "
                   << size/1024.0/1.024/timer.elapsed() << "MiB/s\tRatio: " << baseSize/xisfImage.size() << std::endl;

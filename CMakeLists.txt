@@ -1,16 +1,10 @@
 cmake_minimum_required(VERSION 3.14)
 
-project(libXISF VERSION 0.1.2 LANGUAGES CXX C)
+project(libXISF VERSION 0.2.0 LANGUAGES CXX C)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
-set(CMAKE_AUTOUIC ON)
-set(CMAKE_AUTOMOC ON)
-set(CMAKE_AUTORCC ON)
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
-find_package(QT NAMES Qt6 Qt5 COMPONENTS Core REQUIRED)
-find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Core REQUIRED)
 
 option(BUILD_SHARED_LIBS "Build using shared libraries" ON)
 
@@ -18,15 +12,23 @@ add_library(XISF
   libXISF_global.h
   libxisf.cpp
   libxisf.h
+  utils.cpp
+  utils.h
+  propertyvariant.cpp
+  propertyvariant.h
   lz4/lz4.c
   lz4/lz4.h
   lz4/lz4hc.c
   lz4/lz4hc.h
+  pugixml/pugixml.cpp
 )
+
+add_subdirectory(zlib)
+set_target_properties(zlibstatic PROPERTIES POSITION_INDEPENDENT_CODE ${BUILD_SHARED_LIBS})
 
 set_target_properties(XISF PROPERTIES VERSION ${PROJECT_VERSION} SOVERSION ${PROJECT_VERSION_MAJOR})
 
-target_link_libraries(XISF PUBLIC Qt${QT_VERSION_MAJOR}::Core)
+target_link_libraries(XISF PUBLIC zlibstatic)
 
 if(BUILD_SHARED_LIBS)
     target_compile_definitions(XISF PRIVATE LIBXISF_LIBRARY)

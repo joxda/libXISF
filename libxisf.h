@@ -21,12 +21,13 @@
 
 #include "libXISF_global.h"
 #include <memory>
-#include <QIODevice>
-#include <QVariant>
-#include <QXmlStreamReader>
-#include <QDateTime>
+#include <map>
+#include <variant>
+#include <fstream>
+#include <cstring>
+#include "propertyvariant.h"
 
-class QXmlStreamReader;
+namespace pugi { class xml_node; }
 
 namespace LibXISF
 {
@@ -47,31 +48,31 @@ struct DataBlock
     uint64_t uncompressedSize = 0;
     CompressionCodec codec = None;
     int compressLevel = -1;
-    QByteArray data;
-    void decompress(const QByteArray &input, const QString &encoding = "");
+    ByteArray data;
+    void decompress(const ByteArray &input, const std::string &encoding = "");
     void compress(int sampleFormatSize);
 };
 
 struct LIBXISF_EXPORT Property
 {
-    QString id;
-    QVariant value;
-    QString comment;
+    String id;
+    Variant value;
+    String comment;
 
     Property() = default;
     Property(const Property &) = default;
-    Property(const QString &_id, const char *_value);
+    Property(const String &_id, const char *_value);
     template<typename T>
-    Property(const QString &_id, const T& _value) :
+    Property(const String &_id, const T& _value) :
         id(_id),
-        value(QVariant::fromValue<T>(_value)){}
+        value(_value){}
 };
 
 struct LIBXISF_EXPORT FITSKeyword
 {
-    QString name;
-    QString value;
-    QString comment;
+    String name;
+    String value;
+    String comment;
 };
 
 /**
@@ -89,7 +90,7 @@ struct LIBXISF_EXPORT ColorFilterArray
 {
     int width = 0;
     int height = 0;
-    QString pattern;
+    String pattern;
 };
 
 typedef std::pair<double, double> Bounds;
@@ -166,7 +167,7 @@ public:
     /** Add image property while doing automatic conversion of FITS name to XISF property
      *  For example OBSERVER => Observer:Name, SITELAT => Observation:Location:Latitude
     */
-    bool addFITSKeywordAsProperty(const QString &name, const QVariant &value);
+    bool addFITSKeywordAsProperty(const String &name, const Variant &value);
 
     void* imageData();
     const void* imageData() const;
@@ -183,16 +184,16 @@ public:
     /** Convert between Planar and Normal storage format s*/
     void convertPixelStorageTo(PixelStorage storage);
 
-    static Type imageTypeEnum(const QString &type);
-    static QString imageTypeString(Type type);
-    static PixelStorage pixelStorageEnum(const QString &storage);
-    static QString pixelStorageString(PixelStorage storage);
-    static SampleFormat sampleFormatEnum(const QString &format);
+    static Type imageTypeEnum(const String &type);
+    static String imageTypeString(Type type);
+    static PixelStorage pixelStorageEnum(const String &storage);
+    static String pixelStorageString(PixelStorage storage);
+    static SampleFormat sampleFormatEnum(const String &format);
     template<typename T>
     static SampleFormat sampleFormatEnum();
-    static QString sampleFormatString(SampleFormat format);
-    static ColorSpace colorSpaceEnum(const QString &colorSpace);
-    static QString colorSpaceString(ColorSpace colorSpace);
+    static String sampleFormatString(SampleFormat format);
+    static ColorSpace colorSpaceEnum(const String &colorSpace);
+    static String colorSpaceString(ColorSpace colorSpace);
     static size_t sampleFormatSize(SampleFormat sampleFormat);
 
 private:
@@ -205,24 +206,24 @@ private:
     SampleFormat _sampleFormat = UInt16;
     ColorSpace _colorSpace = Gray;
     DataBlock _dataBlock;
-    QByteArray _iccProfile;
+    ByteArray _iccProfile;
     ColorFilterArray _cfa;
     std::vector<Property> _properties;
-    std::map<QString, uint32_t> _propertiesId;
+    std::map<String, uint32_t> _propertiesId;
     std::vector<FITSKeyword> _fitsKeywords;
 
     friend class XISFReader;
     friend class XISFWriter;
+    friend class XISFReaderNoQt;
 };
 
 class LIBXISF_EXPORT XISFReader
 {
 public:
-    XISFReader();
-    void open(const QString &name);
-    void open(const QByteArray &data);
-    /** Open image from QIODevice. This method takes ownership of *io pointer */
-    void open(QIODevice *io);
+    void open(const String &name);
+    void open(const ByteArray &data);
+    /** Open image from istream. This method takes ownership of *io pointer */
+    void open(std::istream *io);
     /** Close opended file release all data. */
     void close();
     /** Return number of images inside file */
@@ -235,16 +236,14 @@ public:
 private:
     void readXISFHeader();
     void readSignature();
-    void readImageElement();
-    Property readPropertyElement();
-    FITSKeyword readFITSKeyword();
-    void readDataElement(DataBlock &dataBlock);
-    DataBlock readDataBlock();
-    void readCompression(DataBlock &dataBlock);
-    ColorFilterArray readCFA();
+    void parseCompression(const pugi::xml_node &node, DataBlock &dataBlock);
+    DataBlock parseDataBlock(const pugi::xml_node &node);
+    Property parseProperty(const pugi::xml_node &node);
+    FITSKeyword parseFITSKeyword(const pugi::xml_node &node);
+    ColorFilterArray parseCFA(const pugi::xml_node &node);
+    Image parseImage(const pugi::xml_node &node);
 
-    std::unique_ptr<QIODevice> _io;
-    std::unique_ptr<QXmlStreamReader> _xml;
+    std::unique_ptr<std::istream> _io;
     std::vector<Image> _images;
     std::vector<Property> _properties;
 };
@@ -252,91 +251,21 @@ private:
 class LIBXISF_EXPORT XISFWriter
 {
 public:
-    XISFWriter();
-    void save(const QString &name);
-    void save(QByteArray &data);
-    void save(QIODevice &io);
+    void save(const String &name);
+    void save(ByteArray &data);
+    void save(std::ostream &io);
     void writeImage(const Image &image);
 private:
     void writeHeader();
-    void writeImageElement(const Image &image);
-    void writeDataBlockAttributes(const DataBlock &dataBlock);
-    void writeCompressionAttributes(const DataBlock &dataBlock);
-    void writePropertyElement(const Property &property);
-    void writeFITSKeyword(const FITSKeyword &keyword);
-    void writeMetadata();
-    void writeCFA(const Image &image);
-    void writeICC(const QByteArray &icc);
-    std::unique_ptr<QXmlStreamWriter> _xml;
-    QByteArray _xisfHeader;
-    QByteArray _attachmentsData;
+    void writeImageElement(pugi::xml_node &node, const Image &image);
+    void writeDataBlockAttributes(pugi::xml_node &image_node, const DataBlock &dataBlock);
+    void writePropertyElement(pugi::xml_node &node, const Property &property);
+    void writeFITSKeyword(pugi::xml_node &node, const FITSKeyword &keyword);
+    void writeMetadata(pugi::xml_node &node);
+    ByteArray _xisfHeader;
+    ByteArray _attachmentsData;
     std::vector<Image> _images;
 };
-
-struct Complex32
-{
-    float real;
-    float imag;
-};
-
-struct Complex64
-{
-    double real;
-    double imag;
-};
-
-template<typename T>
-class Matrix
-{
-    int _rows = 0;
-    int _cols = 0;
-    std::vector<T> _elem;
-public:
-    Matrix() = default;
-    Matrix(int rows, int cols) : _rows(rows), _cols(cols), _elem(rows * cols) {}
-    void resize(int rows, int cols) { _rows = rows; _cols = cols; _elem.resize(rows * cols); }
-    T& operator()(int row, int col) { return _elem[row * _cols + col]; }
-
-    friend class MatrixConvert;
-};
-
-typedef bool Boolean;
-typedef int8_t Int8;
-typedef uint8_t UInt8;
-typedef int16_t Int16;
-typedef uint16_t UInt16;
-typedef int32_t Int32;
-typedef uint32_t UInt32;
-typedef int64_t Int64;
-typedef uint64_t UInt64;
-typedef float Float32;
-typedef double Float64;
-typedef QDateTime TimePoint;
-typedef std::vector<int8_t> I8Vector;
-typedef std::vector<uint8_t> UI8Vector;
-typedef std::vector<int16_t> I16Vector;
-typedef std::vector<uint16_t> UI16Vector;
-typedef std::vector<int32_t> I32Vector;
-typedef std::vector<uint32_t> UI32Vector;
-typedef std::vector<int64_t> I64Vector;
-typedef std::vector<uint64_t> UI64Vector;
-typedef std::vector<float> F32Vector;
-typedef std::vector<double> F64Vector;
-typedef std::vector<Complex32> C32Vector;
-typedef std::vector<Complex64> C64Vector;
-typedef Matrix<Int8> I8Matrix;
-typedef Matrix<UInt8> UI8Matrix;
-typedef Matrix<Int16> I16Matrix;
-typedef Matrix<UInt16> UI16Matrix;
-typedef Matrix<Int32> I32Matrix;
-typedef Matrix<UInt32> UI32Matrix;
-typedef Matrix<Int64> I64Matrix;
-typedef Matrix<UInt64> UI64Matrix;
-typedef Matrix<float> F32Matrix;
-typedef Matrix<double> F64Matrix;
-typedef Matrix<Complex32> C32Matrix;
-typedef Matrix<Complex64> C64Matrix;
-typedef QString String;
 
 class LIBXISF_EXPORT Error : public std::exception
 {
@@ -362,45 +291,5 @@ Image::SampleFormat Image::sampleFormatEnum()
 }
 
 }
-
-Q_DECLARE_METATYPE(LibXISF::Boolean);
-Q_DECLARE_METATYPE(LibXISF::Int8);
-Q_DECLARE_METATYPE(LibXISF::UInt8);
-Q_DECLARE_METATYPE(LibXISF::Int16);
-Q_DECLARE_METATYPE(LibXISF::UInt16);
-Q_DECLARE_METATYPE(LibXISF::Int32);
-Q_DECLARE_METATYPE(LibXISF::UInt32);
-Q_DECLARE_METATYPE(LibXISF::Int64);
-Q_DECLARE_METATYPE(LibXISF::UInt64);
-Q_DECLARE_METATYPE(LibXISF::Float32);
-Q_DECLARE_METATYPE(LibXISF::Float64);
-Q_DECLARE_METATYPE(LibXISF::Complex32);
-Q_DECLARE_METATYPE(LibXISF::Complex64);
-Q_DECLARE_METATYPE(LibXISF::TimePoint);
-Q_DECLARE_METATYPE(LibXISF::I8Vector);
-Q_DECLARE_METATYPE(LibXISF::UI8Vector);
-Q_DECLARE_METATYPE(LibXISF::I16Vector);
-Q_DECLARE_METATYPE(LibXISF::UI16Vector);
-Q_DECLARE_METATYPE(LibXISF::I32Vector);
-Q_DECLARE_METATYPE(LibXISF::UI32Vector);
-Q_DECLARE_METATYPE(LibXISF::I64Vector);
-Q_DECLARE_METATYPE(LibXISF::UI64Vector);
-Q_DECLARE_METATYPE(LibXISF::F32Vector);
-Q_DECLARE_METATYPE(LibXISF::F64Vector);
-Q_DECLARE_METATYPE(LibXISF::C32Vector);
-Q_DECLARE_METATYPE(LibXISF::C64Vector);
-Q_DECLARE_METATYPE(LibXISF::I8Matrix);
-Q_DECLARE_METATYPE(LibXISF::UI8Matrix);
-Q_DECLARE_METATYPE(LibXISF::I16Matrix);
-Q_DECLARE_METATYPE(LibXISF::UI16Matrix);
-Q_DECLARE_METATYPE(LibXISF::I32Matrix);
-Q_DECLARE_METATYPE(LibXISF::UI32Matrix);
-Q_DECLARE_METATYPE(LibXISF::I64Matrix);
-Q_DECLARE_METATYPE(LibXISF::UI64Matrix);
-Q_DECLARE_METATYPE(LibXISF::F32Matrix);
-Q_DECLARE_METATYPE(LibXISF::F64Matrix);
-Q_DECLARE_METATYPE(LibXISF::C32Matrix);
-Q_DECLARE_METATYPE(LibXISF::C64Matrix);
-Q_DECLARE_METATYPE(LibXISF::String);
 
 #endif // LIBXISF_H

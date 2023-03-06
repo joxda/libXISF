@@ -35,8 +35,6 @@ namespace LibXISF
 void deserializeVariant(const pugi::xml_node &node, Variant &variant, const ByteArray &data);
 void serializeVariant(pugi::xml_node &node, const Variant &variant);
 
-static std::unordered_map<String, int> typeToId;
-static std::unordered_map<int, String> idToType;
 static std::unordered_map<String, Image::Type> imageTypeToEnum;
 static std::unordered_map<Image::Type, String> imageTypeToString;
 static std::unordered_map<String, Image::SampleFormat> sampleFormatToEnum;
@@ -506,7 +504,38 @@ size_t Image::sampleFormatSize(SampleFormat sampleFormat)
     return sizeof(UInt16);
 }
 
-void XISFReader::open(const String &name)
+class XISFReaderPrivate
+{
+public:
+    void open(const String &name);
+    void open(const ByteArray &data);
+    /** Open image from istream. This method takes ownership of *io pointer */
+    void open(std::istream *io);
+    /** Close opended file release all data. */
+    void close();
+    /** Return number of images inside file */
+    int imagesCount() const;
+    /** Return reference to Image
+     *  @param n index of image
+     *  @param readPixel when false it will read pixel data from file and imageData()
+     *  will return nullptr */
+    const Image& getImage(uint32_t n, bool readPixels = true);
+private:
+    void readXISFHeader();
+    void readSignature();
+    void parseCompression(const pugi::xml_node &node, DataBlock &dataBlock);
+    DataBlock parseDataBlock(const pugi::xml_node &node);
+    Property parseProperty(const pugi::xml_node &node);
+    FITSKeyword parseFITSKeyword(const pugi::xml_node &node);
+    ColorFilterArray parseCFA(const pugi::xml_node &node);
+    Image parseImage(const pugi::xml_node &node);
+
+    std::unique_ptr<std::istream> _io;
+    std::vector<Image> _images;
+    std::vector<Property> _properties;
+};
+
+void XISFReaderPrivate::open(const String &name)
 {
     close();
     _io = std::make_unique<std::ifstream>(name.c_str(), std::ios_base::in | std::ios_base::binary);
@@ -514,7 +543,7 @@ void XISFReader::open(const String &name)
     readXISFHeader();
 }
 
-void XISFReader::open(const ByteArray &data)
+void XISFReaderPrivate::open(const ByteArray &data)
 {
     close();
     std::string str((char*)data.data(), data.size());
@@ -523,7 +552,7 @@ void XISFReader::open(const ByteArray &data)
     readXISFHeader();
 }
 
-void XISFReader::open(std::istream *io)
+void XISFReaderPrivate::open(std::istream *io)
 {
     close();
     _io.reset(io);
@@ -531,19 +560,19 @@ void XISFReader::open(std::istream *io)
     readXISFHeader();
 }
 
-void XISFReader::close()
+void XISFReaderPrivate::close()
 {
     _io.reset();
     _images.clear();
     _properties.clear();
 }
 
-int XISFReader::imagesCount() const
+int XISFReaderPrivate::imagesCount() const
 {
     return _images.size();
 }
 
-const Image& XISFReader::getImage(uint32_t n, bool readPixels)
+const Image& XISFReaderPrivate::getImage(uint32_t n, bool readPixels)
 {
     if(n >= _images.size())
         throw Error("Out of bounds");
@@ -559,7 +588,7 @@ const Image& XISFReader::getImage(uint32_t n, bool readPixels)
     return img;
 }
 
-void XISFReader::readXISFHeader()
+void XISFReaderPrivate::readXISFHeader()
 {
     uint32_t headerLen[2] = {0};
     _io->read((char*)&headerLen, sizeof(headerLen));
@@ -583,7 +612,7 @@ void XISFReader::readXISFHeader()
     else throw Error("Unknown root XML element");
 }
 
-void XISFReader::readSignature()
+void XISFReaderPrivate::readSignature()
 {
     char signature[8];
     _io->read(signature, sizeof(signature));
@@ -594,7 +623,7 @@ void XISFReader::readSignature()
         throw Error("Not valid XISF 1.0 file");
 }
 
-void XISFReader::parseCompression(const pugi::xml_node &node, DataBlock &dataBlock)
+void XISFReaderPrivate::parseCompression(const pugi::xml_node &node, DataBlock &dataBlock)
 {
     std::vector<std::string> compression = split_string(node.attribute("compression").as_string(), ':');
     if(compression.size() >= 2)
@@ -620,7 +649,7 @@ void XISFReader::parseCompression(const pugi::xml_node &node, DataBlock &dataBlo
     }
 }
 
-DataBlock XISFReader::parseDataBlock(const pugi::xml_node &node)
+DataBlock XISFReaderPrivate::parseDataBlock(const pugi::xml_node &node)
 {
     DataBlock dataBlock;
     std::vector<std::string> location = split_string(node.attribute("location").as_string(), ':');
@@ -663,7 +692,7 @@ DataBlock XISFReader::parseDataBlock(const pugi::xml_node &node)
     return dataBlock;
 }
 
-Property XISFReader::parseProperty(const pugi::xml_node &node)
+Property XISFReaderPrivate::parseProperty(const pugi::xml_node &node)
 {
     Property property;
 
@@ -691,7 +720,7 @@ Property XISFReader::parseProperty(const pugi::xml_node &node)
     return property;
 }
 
-FITSKeyword XISFReader::parseFITSKeyword(const pugi::xml_node &node)
+FITSKeyword XISFReaderPrivate::parseFITSKeyword(const pugi::xml_node &node)
 {
     FITSKeyword fitsKeyword;
     fitsKeyword.name = node.attribute("name").as_string();
@@ -700,7 +729,7 @@ FITSKeyword XISFReader::parseFITSKeyword(const pugi::xml_node &node)
     return fitsKeyword;
 }
 
-ColorFilterArray XISFReader::parseCFA(const pugi::xml_node &node)
+ColorFilterArray XISFReaderPrivate::parseCFA(const pugi::xml_node &node)
 {
     ColorFilterArray cfa;
     if(node.attribute("pattern") && node.attribute("width") && node.attribute("height"))
@@ -716,7 +745,7 @@ ColorFilterArray XISFReader::parseCFA(const pugi::xml_node &node)
     return cfa;
 }
 
-Image XISFReader::parseImage(const pugi::xml_node &node)
+Image XISFReaderPrivate::parseImage(const pugi::xml_node &node)
 {
     Image image;
 
@@ -758,8 +787,26 @@ Image XISFReader::parseImage(const pugi::xml_node &node)
     return image;
 }
 
+class  XISFWriterPrivate
+{
+public:
+    void save(const String &name);
+    void save(ByteArray &data);
+    void save(std::ostream &io);
+    void writeImage(const Image &image);
+private:
+    void writeHeader();
+    void writeImageElement(pugi::xml_node &node, const Image &image);
+    void writeDataBlockAttributes(pugi::xml_node &image_node, const DataBlock &dataBlock);
+    void writePropertyElement(pugi::xml_node &node, const Property &property);
+    void writeFITSKeyword(pugi::xml_node &node, const FITSKeyword &keyword);
+    void writeMetadata(pugi::xml_node &node);
+    ByteArray _xisfHeader;
+    ByteArray _attachmentsData;
+    std::vector<Image> _images;
+};
 
-void XISFWriter::save(const String &name)
+void XISFWriterPrivate::save(const String &name)
 {
     std::ofstream fw(name.c_str(), std::ios_base::out | std::ios_base::binary);
 
@@ -769,7 +816,7 @@ void XISFWriter::save(const String &name)
     save(fw);
 }
 
-void XISFWriter::save(ByteArray &data)
+void XISFWriterPrivate::save(ByteArray &data)
 {
     std::ostringstream oss;
     save(oss);
@@ -777,7 +824,7 @@ void XISFWriter::save(ByteArray &data)
     data = ByteArray(str.data(), str.size());
 }
 
-void XISFWriter::save(std::ostream &io)
+void XISFWriterPrivate::save(std::ostream &io)
 {
     writeHeader();
 
@@ -789,14 +836,14 @@ void XISFWriter::save(std::ostream &io)
     }
 }
 
-void XISFWriter::writeImage(const Image &image)
+void XISFWriterPrivate::writeImage(const Image &image)
 {
     _images.push_back(image);
     _images.back()._dataBlock.attachmentPos = 1;
     _images.back()._dataBlock.compress(image.sampleFormatSize(image.sampleFormat()));
 }
 
-void XISFWriter::writeHeader()
+void XISFWriterPrivate::writeHeader()
 {
     const char signature[16] = {'X', 'I', 'S', 'F', '0', '1', '0', '0', 0, 0, 0, 0, 0, 0, 0, 0};
 
@@ -840,7 +887,7 @@ void XISFWriter::writeHeader()
     _xisfHeader = ByteArray(header.c_str(), header.size());
 }
 
-void XISFWriter::writeImageElement(pugi::xml_node &node, const Image &image)
+void XISFWriterPrivate::writeImageElement(pugi::xml_node &node, const Image &image)
 {
     pugi::xml_node image_node = node.append_child("Image");
     std::string geometry = std::to_string(image._width) + ":" + std::to_string(image._height) + ":" + std::to_string(image._channelCount);
@@ -881,7 +928,7 @@ void XISFWriter::writeImageElement(pugi::xml_node &node, const Image &image)
     }
 }
 
-void XISFWriter::writeDataBlockAttributes(pugi::xml_node &image_node, const DataBlock &dataBlock)
+void XISFWriterPrivate::writeDataBlockAttributes(pugi::xml_node &image_node, const DataBlock &dataBlock)
 {
     if(dataBlock.embedded)
     {
@@ -919,7 +966,7 @@ void XISFWriter::writeDataBlockAttributes(pugi::xml_node &image_node, const Data
     }
 }
 
-void XISFWriter::writePropertyElement(pugi::xml_node &node, const Property &property)
+void XISFWriterPrivate::writePropertyElement(pugi::xml_node &node, const Property &property)
 {
     pugi::xml_node property_node = node.append_child("Property");
     property_node.append_attribute("id").set_value(property.id.c_str());
@@ -930,7 +977,7 @@ void XISFWriter::writePropertyElement(pugi::xml_node &node, const Property &prop
         property_node.append_attribute("comment").set_value(property.comment.c_str());
 }
 
-void XISFWriter::writeFITSKeyword(pugi::xml_node &node, const FITSKeyword &keyword)
+void XISFWriterPrivate::writeFITSKeyword(pugi::xml_node &node, const FITSKeyword &keyword)
 {
     pugi::xml_node fits_node = node.append_child("FITSKeyword");
     fits_node.append_attribute("name").set_value(keyword.name.c_str());
@@ -938,13 +985,83 @@ void XISFWriter::writeFITSKeyword(pugi::xml_node &node, const FITSKeyword &keywo
     fits_node.append_attribute("comment").set_value(keyword.comment.c_str());
 }
 
-void XISFWriter::writeMetadata(pugi::xml_node &node)
+void XISFWriterPrivate::writeMetadata(pugi::xml_node &node)
 {
     pugi::xml_node metadata = node.append_child("Metadata");
     std::time_t t = std::time(nullptr);
     std::tm tm = *std::gmtime(&t);
     writePropertyElement(metadata, Property("XISF:CreationTime", tm));
     writePropertyElement(metadata, Property("XISF:CreatorApplication", "LibXISF"));
+}
+
+XISFReader::XISFReader()
+{
+    p = new XISFReaderPrivate;
+}
+
+XISFReader::~XISFReader()
+{
+    delete p;
+}
+
+void XISFReader::open(const String &name)
+{
+    p->open(name);
+}
+
+void XISFReader::open(const ByteArray &data)
+{
+    p->open(data);
+}
+
+void XISFReader::open(std::istream *io)
+{
+    p->open(io);
+}
+
+void XISFReader::close()
+{
+    p->close();
+}
+
+int XISFReader::imagesCount() const
+{
+    return p->imagesCount();
+}
+
+const Image &XISFReader::getImage(uint32_t n, bool readPixels)
+{
+    return p->getImage(n, readPixels);
+}
+
+XISFWriter::XISFWriter()
+{
+    p = new XISFWriterPrivate;
+}
+
+XISFWriter::~XISFWriter()
+{
+    delete p;
+}
+
+void XISFWriter::save(const String &name)
+{
+    p->save(name);
+}
+
+void XISFWriter::save(ByteArray &data)
+{
+    p->save(data);
+}
+
+void XISFWriter::save(std::ostream &io)
+{
+    p->save(io);
+}
+
+void XISFWriter::writeImage(const Image &image)
+{
+    p->writeImage(image);
 }
 
 #define STRING_ENUM(map, map2, c, e) { map.insert({#e, c::e}); map2.insert({c::e, #e}); }

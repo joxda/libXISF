@@ -27,12 +27,13 @@
 #include <cstring>
 #include "propertyvariant.h"
 
-namespace pugi { class xml_node; }
-
 namespace LibXISF
 {
 
-struct DataBlock
+class XISFReaderPrivate;
+class XISFWriterPrivate;
+
+struct LIBXISF_EXPORT DataBlock
 {
     enum CompressionCodec
     {
@@ -190,7 +191,7 @@ public:
     static String pixelStorageString(PixelStorage storage);
     static SampleFormat sampleFormatEnum(const String &format);
     template<typename T>
-    static SampleFormat sampleFormatEnum();
+    constexpr static SampleFormat sampleFormatEnum();
     static String sampleFormatString(SampleFormat format);
     static ColorSpace colorSpaceEnum(const String &colorSpace);
     static String colorSpaceString(ColorSpace colorSpace);
@@ -212,14 +213,15 @@ private:
     std::map<String, uint32_t> _propertiesId;
     std::vector<FITSKeyword> _fitsKeywords;
 
-    friend class XISFReader;
-    friend class XISFWriter;
-    friend class XISFReaderNoQt;
+    friend class XISFReaderPrivate;
+    friend class XISFWriterPrivate;
 };
 
 class LIBXISF_EXPORT XISFReader
 {
 public:
+    XISFReader();
+    virtual ~XISFReader();
     void open(const String &name);
     void open(const ByteArray &data);
     /** Open image from istream. This method takes ownership of *io pointer */
@@ -234,37 +236,20 @@ public:
      *  will return nullptr */
     const Image& getImage(uint32_t n, bool readPixels = true);
 private:
-    void readXISFHeader();
-    void readSignature();
-    void parseCompression(const pugi::xml_node &node, DataBlock &dataBlock);
-    DataBlock parseDataBlock(const pugi::xml_node &node);
-    Property parseProperty(const pugi::xml_node &node);
-    FITSKeyword parseFITSKeyword(const pugi::xml_node &node);
-    ColorFilterArray parseCFA(const pugi::xml_node &node);
-    Image parseImage(const pugi::xml_node &node);
-
-    std::unique_ptr<std::istream> _io;
-    std::vector<Image> _images;
-    std::vector<Property> _properties;
+    XISFReaderPrivate *p;
 };
 
 class LIBXISF_EXPORT XISFWriter
 {
 public:
+    XISFWriter();
+    virtual ~XISFWriter();
     void save(const String &name);
     void save(ByteArray &data);
     void save(std::ostream &io);
     void writeImage(const Image &image);
 private:
-    void writeHeader();
-    void writeImageElement(pugi::xml_node &node, const Image &image);
-    void writeDataBlockAttributes(pugi::xml_node &image_node, const DataBlock &dataBlock);
-    void writePropertyElement(pugi::xml_node &node, const Property &property);
-    void writeFITSKeyword(pugi::xml_node &node, const FITSKeyword &keyword);
-    void writeMetadata(pugi::xml_node &node);
-    ByteArray _xisfHeader;
-    ByteArray _attachmentsData;
-    std::vector<Image> _images;
+    XISFWriterPrivate *p;
 };
 
 class LIBXISF_EXPORT Error : public std::exception
@@ -278,7 +263,7 @@ public:
 };
 
 template<typename T>
-Image::SampleFormat Image::sampleFormatEnum()
+constexpr Image::SampleFormat Image::sampleFormatEnum()
 {
     if(std::is_same<T, LibXISF::UInt8>::value)return Image::UInt8;
     if(std::is_same<T, LibXISF::UInt16>::value)return Image::UInt16;

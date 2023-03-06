@@ -27,11 +27,12 @@
 #include <cstring>
 #include <ctime>
 #include <sstream>
+#include "libXISF_global.h"
 
 namespace LibXISF
 {
 
-class ByteArray
+class LIBXISF_EXPORT ByteArray
 {
     using PtrType = std::vector<char>;
     using Ptr = std::shared_ptr<PtrType>;

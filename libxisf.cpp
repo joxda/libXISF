@@ -34,6 +34,7 @@ namespace LibXISF
 std::vector<std::string> splitString(const std::string &str, char delimiter);
 void deserializeVariant(const pugi::xml_node &node, Variant &variant, const ByteArray &data);
 void serializeVariant(pugi::xml_node &node, const Variant &variant);
+Variant variantFromString(Variant::Type type, const String &str);
 
 static std::unordered_map<String, Image::Type> imageTypeToEnum;
 static std::unordered_map<Image::Type, String> imageTypeToString;
@@ -344,13 +345,12 @@ void Image::addFITSKeyword(const FITSKeyword &keyword)
     _fitsKeywords.push_back(keyword);
 }
 
-bool Image::addFITSKeywordAsProperty(const String &name, const Variant &value)
+bool Image::addFITSKeywordAsProperty(const String &name, const String &value)
 {
     if(fitsNameToPropertyIdTypeConvert.count(name))
     {
         auto &c = fitsNameToPropertyIdTypeConvert.at(name);
-        Property prop(c.first, value);
-        //prop.value.convert(c.second);
+        Property prop(c.first, variantFromString(c.second, value));
         updateProperty(prop);
         return true;
     }

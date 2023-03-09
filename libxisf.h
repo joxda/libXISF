@@ -299,7 +299,7 @@ public:
     /** Add image property while doing automatic conversion of FITS name to XISF property
      *  For example OBSERVER => Observer:Name, SITELAT => Observation:Location:Latitude
     */
-    bool addFITSKeywordAsProperty(const String &name, const Variant &value);
+    bool addFITSKeywordAsProperty(const String &name, const String &value);
 
     void* imageData();
     const void* imageData() const;

@@ -371,6 +371,27 @@ void serializeVariant(pugi::xml_node &node, const Variant &variant)
         node.append_attribute("value").set_value(ss.str().c_str());
     }
 }
+Variant variantFromString(Variant::Type type, const String &str)
+{
+    Variant variant;
+    switch(type)
+    {
+    case Variant::Type::Int32: variant = fromChars<Int32>(str.c_str(), str.c_str() + str.size()); break;
+    case Variant::Type::Float32: variant = fromChars<Float32>(str.c_str(), str.c_str() + str.size()); break;
+    case Variant::Type::Float64: variant = fromChars<Float64>(str.c_str(), str.c_str() + str.size()); break;
+    case Variant::Type::String: variant = str; break;
+    case Variant::Type::TimePoint:
+    {
+        std::istringstream ss(str);
+        std::tm tm = {};
+        ss >> std::get_time(&tm, "%Y-%m-%dT%H:%M:%SZ");
+        variant = tm;
+        break;
+    }
+    default: break;
+    }
+    return variant;
+}
 
 Variant::Type Variant::type() const
 {

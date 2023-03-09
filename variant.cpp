@@ -406,4 +406,53 @@ const char* Variant::typeName() const
         return "";
 }
 
+String Variant::toString() const
+{
+    std::string string;
+    char str[32] = {0};
+    char *end = str + sizeof(str);
+
+    auto vectorString = [](auto &vector) {
+        std::stringstream ss;
+        ss << "{";
+        for(auto &i : vector)
+            ss << i << ",";
+        ss << "}";
+        return ss.str();
+    };
+
+    switch(type())
+    {
+    case Variant::Type::Int8: toChars<Int8>(_value, str, end); break;
+    case Variant::Type::UInt8: toChars<UInt8>(_value, str, end); break;
+    case Variant::Type::Int16: toChars<Int16>(_value, str, end); break;
+    case Variant::Type::UInt16: toChars<UInt16>(_value, str, end); break;
+    case Variant::Type::Int32: toChars<Int32>(_value, str, end); break;
+    case Variant::Type::UInt32: toChars<UInt32>(_value, str, end); break;
+    case Variant::Type::Int64: toChars<Int64>(_value, str, end); break;
+    case Variant::Type::UInt64: toChars<UInt64>(_value, str, end); break;
+    case Variant::Type::Float32: toChars<Float32>(_value, str, end); break;
+    case Variant::Type::Float64: toChars<Float64>(_value, str, end); break;
+    case Variant::Type::Complex32: toCharsComplex<Complex32>(_value, string); break;
+    case Variant::Type::Complex64: toCharsComplex<Complex64>(_value, string); break;
+    case Variant::Type::I8Vector: string = vectorString(std::get<I8Vector>(_value)); break;
+    case Variant::Type::UI8Vector: string = vectorString(std::get<UI8Vector>(_value)); break;
+    case Variant::Type::I16Vector: string = vectorString(std::get<I16Vector>(_value)); break;
+    case Variant::Type::UI16Vector: string = vectorString(std::get<UI16Vector>(_value)); break;
+    case Variant::Type::I32Vector: string = vectorString(std::get<I32Vector>(_value)); break;
+    case Variant::Type::UI32Vector: string = vectorString(std::get<UI32Vector>(_value)); break;
+    case Variant::Type::I64Vector: string = vectorString(std::get<I64Vector>(_value)); break;
+    case Variant::Type::UI64Vector: string = vectorString(std::get<UI64Vector>(_value)); break;
+    case Variant::Type::F32Vector: string = vectorString(std::get<F32Vector>(_value)); break;
+    case Variant::Type::F64Vector: string = vectorString(std::get<F64Vector>(_value)); break;
+    case Variant::Type::String: string = std::get<String>(_value); break;
+    default: string = typeName(); break;
+    }
+
+    if(type() >= Variant::Type::Int8 && type() <= Variant::Type::Float64)
+        string = str;
+
+    return string;
+}
+
 }

@@ -162,6 +162,7 @@ public:
     const T& value() const { return std::get<T>(_value); }
     template<typename T>
     void setValue(const T& val) { _value = val; }
+    String toString() const;
 };
 
 struct LIBXISF_EXPORT DataBlock

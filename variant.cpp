@@ -446,6 +446,13 @@ String Variant::toString() const
     case Variant::Type::F32Vector: string = vectorString(std::get<F32Vector>(_value)); break;
     case Variant::Type::F64Vector: string = vectorString(std::get<F64Vector>(_value)); break;
     case Variant::Type::String: string = std::get<String>(_value); break;
+    case Variant::Type::TimePoint:
+    {
+        std::ostringstream ss;
+        ss << std::put_time(&std::get<TimePoint>(_value), "%Y-%m-%dT%H:%M:%SZ");
+        string = ss.str();
+        break;
+    }
     default: string = typeName(); break;
     }
 

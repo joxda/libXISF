@@ -16,12 +16,14 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.*
  ************************************************************************/
 
-#ifndef UTILS_H
-#define UTILS_H
+#ifndef LIBXISF_BYTEARRAY_H
+#define LIBXISF_BYTEARRAY_H
 
-#include <vector>
-#include <string>
+namespace LibXISF
+{
 
-std::vector<std::string> split_string(const std::string &str, char delimiter);
 
-#endif // UTILS_H
+
+}
+
+#endif // LIBXISF_BYTEARRAY_H

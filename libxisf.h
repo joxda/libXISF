@@ -25,13 +25,44 @@
 #include <variant>
 #include <fstream>
 #include <cstring>
-#include "propertyvariant.h"
+#include "variant.h"
 
 namespace LibXISF
 {
 
 class XISFReaderPrivate;
 class XISFWriterPrivate;
+
+class LIBXISF_EXPORT ByteArray
+{
+    using PtrType = std::vector<char>;
+    using Ptr = std::shared_ptr<PtrType>;
+    Ptr _data;
+    void makeUnique();
+public:
+    ByteArray() : ByteArray((size_t)0) {}
+    explicit ByteArray(size_t size);
+    explicit ByteArray(const char *ptr);
+    ByteArray(const char *ptr, size_t size)
+    {
+        _data = std::make_shared<std::vector<char>>();
+        _data->resize(size);
+        std::memcpy(data(), ptr, size);
+    }
+    ByteArray(const ByteArray &d);
+    char& operator[](size_t i);
+    const char& operator[](size_t i) const;
+    char* data() { return &_data->at(0); }
+    const char* data() const { return &_data->at(0); }
+    const char* constData() const { return &_data->at(0); }
+    size_t size() const;
+    void resize(size_t newsize);
+    void append(char c);
+    void decodeBase64();
+    void encodeBase64();
+    void encodeHex();
+    void decodeHex();
+};
 
 struct LIBXISF_EXPORT DataBlock
 {

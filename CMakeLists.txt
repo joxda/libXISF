@@ -11,13 +11,14 @@ set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 option(BUILD_SHARED_LIBS "Build using shared libraries" ON)
 
 add_library(XISF
+  bytearray.cpp
+  bytearray.h
   libXISF_global.h
   libxisf.cpp
   libxisf.h
   utils.cpp
-  utils.h
-  propertyvariant.cpp
-  propertyvariant.h
+  variant.cpp
+  variant.h
   lz4/lz4.c
   lz4/lz4.h
   lz4/lz4hc.c

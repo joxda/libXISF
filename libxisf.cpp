@@ -27,11 +27,11 @@
 #include "lz4/lz4hc.h"
 #include "pugixml/pugixml.hpp"
 #include "zlib/zlib.h"
-#include "utils.h"
 
 namespace LibXISF
 {
 
+std::vector<std::string> splitString(const std::string &str, char delimiter);
 void deserializeVariant(const pugi::xml_node &node, Variant &variant, const ByteArray &data);
 void serializeVariant(pugi::xml_node &node, const Variant &variant);
 
@@ -118,9 +118,9 @@ void DataBlock::decompress(const ByteArray &input, const String &encoding)
     ByteArray tmp = input;
 
     if(encoding == "base64")
-        tmp.decode_base64();
+        tmp.decodeBase64();
     else if(encoding == "base16")
-        tmp.decode_hex();
+        tmp.decodeHex();
 
     switch(codec)
     {
@@ -625,7 +625,7 @@ void XISFReaderPrivate::readSignature()
 
 void XISFReaderPrivate::parseCompression(const pugi::xml_node &node, DataBlock &dataBlock)
 {
-    std::vector<std::string> compression = split_string(node.attribute("compression").as_string(), ':');
+    std::vector<std::string> compression = splitString(node.attribute("compression").as_string(), ':');
     if(compression.size() >= 2)
     {
         if(compression[0].find("zlib") == 0)
@@ -652,7 +652,7 @@ void XISFReaderPrivate::parseCompression(const pugi::xml_node &node, DataBlock &
 DataBlock XISFReaderPrivate::parseDataBlock(const pugi::xml_node &node)
 {
     DataBlock dataBlock;
-    std::vector<std::string> location = split_string(node.attribute("location").as_string(), ':');
+    std::vector<std::string> location = splitString(node.attribute("location").as_string(), ':');
 
     parseCompression(node, dataBlock);
 
@@ -749,14 +749,14 @@ Image XISFReaderPrivate::parseImage(const pugi::xml_node &node)
 {
     Image image;
 
-    std::vector<std::string> geometry = split_string(node.attribute("geometry").as_string(), ':');
+    std::vector<std::string> geometry = splitString(node.attribute("geometry").as_string(), ':');
     if(geometry.size() != 3)throw Error("We support only 2D images");
     image._width = std::stoul(geometry[0]);
     image._height = std::stoul(geometry[1]);
     image._channelCount = std::stoul(geometry[2]);
     if(!image._width || !image._height || !image._channelCount)throw Error("Invalid image geometry");
 
-    std::vector<std::string> bounds = split_string(node.attribute("bounds").as_string(), ':');
+    std::vector<std::string> bounds = splitString(node.attribute("bounds").as_string(), ':');
     if(bounds.size() == 2)
     {
         image._bounds.first = std::stod(bounds[0]);
@@ -921,7 +921,7 @@ void XISFWriterPrivate::writeImageElement(pugi::xml_node &node, const Image &ima
     if(image._iccProfile.size())
     {
         ByteArray base64 = image._iccProfile;
-        base64.decode_base64();
+        base64.decodeBase64();
         pugi::xml_node icc_node = image_node.append_child("ICCProfile");
         icc_node.append_attribute("location").set_value("inline:base64");
         icc_node.append_child(pugi::node_pcdata).set_value(base64.data());

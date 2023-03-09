@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.*
  ************************************************************************/
 
-#ifndef PROPERTYVARIANT_H
-#define PROPERTYVARIANT_H
+#ifndef LIBXISF_VARIANT_H
+#define LIBXISF_VARIANT_H
 
 #include <variant>
 #include <cstdint>
@@ -31,61 +31,6 @@
 
 namespace LibXISF
 {
-
-class LIBXISF_EXPORT ByteArray
-{
-    using PtrType = std::vector<char>;
-    using Ptr = std::shared_ptr<PtrType>;
-    Ptr _data;
-    void makeUnique();
-public:
-    ByteArray() : ByteArray((size_t)0) {}
-    explicit ByteArray(size_t size);
-    explicit ByteArray(const char *ptr);
-    ByteArray(const char *ptr, size_t size)
-    {
-        _data = std::make_shared<std::vector<char>>();
-        _data->resize(size);
-        std::memcpy(data(), ptr, size);
-    }
-    ByteArray(const ByteArray &d);
-    char& operator[](size_t i);
-    const char& operator[](size_t i) const;
-    char* data() { return &_data->at(0); }
-    const char* data() const { return &_data->at(0); }
-    const char* constData() const { return &_data->at(0); }
-    size_t size() const;
-    void resize(size_t newsize);
-    void append(char c);
-    void decode_base64();
-    void encode_base64();
-    void encode_hex();
-    void decode_hex();
-};
-
-class ByteStream : public std::basic_streambuf<char>
-{
-    ByteArray _buffer;
-    pos_type opos = 0;
-    pos_type ipos = 0;
-public:
-    ByteStream();
-    ~ByteStream();
-    const ByteArray& buffer() const;
-    void stats();
-protected:
-    pos_type seekoff(off_type, std::ios_base::seekdir, std::ios_base::openmode = std::ios_base::in | std::ios_base::out) override;
-    pos_type seekpos(pos_type, std::ios_base::openmode = std::ios_base::in | std::ios_base::out) override;
-
-    /*std::streamsize showmanyc() override;
-    std::streamsize xsgetn(char_type *s, std::streamsize n) override;
-    int_type underflow() override;*/
-
-    std::streamsize xsputn(const char_type *s, std::streamsize n) override;
-    int_type overflow(int_type c = traits_type::eof()) override;
-
-    void setoptr();
-};
 
 struct Complex32
 {
@@ -186,4 +131,4 @@ public:
 
 }
 
-#endif // PROPERTYVARIANT_H
+#endif // LIBXISF_VARIANT_H

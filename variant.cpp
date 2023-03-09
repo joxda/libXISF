@@ -16,19 +16,14 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.*
  ************************************************************************/
 
-#include "propertyvariant.h"
+#include "variant.h"
 #include <charconv>
 #include <type_traits>
-#include <array>
 #include <map>
-#include <iostream>
 #include <regex>
 #include <iomanip>
 #include "libxisf.h"
 #include "pugixml/pugixml.hpp"
-
-template<class... Ts> struct overload : Ts... { bool fail = true; using Ts::operator()...; };
-template<class... Ts> overload(Ts...) -> overload<Ts...>;
 
 namespace LibXISF
 {
@@ -180,7 +175,7 @@ void toCharsVector(const Variant &v, size_t &len, ByteArray &data)
     size_t size = len * sizeof(typename T::value_type);
     data.resize(size);
     std::memcpy(data.data(), &v.value<T>()[0], size);
-    data.encode_base64();
+    data.encodeBase64();
 }
 
 template<typename T>
@@ -191,7 +186,7 @@ void toCharsMatrix(const Variant &v, size_t &rows, size_t &cols, ByteArray &data
     size_t size = rows * cols * sizeof(typename T::value_type);
     data.resize(size);
     std::memcpy(data.data(), &v.value<T>()(0, 0), size);
-    data.encode_base64();
+    data.encodeBase64();
 }
 
 void deserializeVariant(const pugi::xml_node &node, Variant &variant, const ByteArray &data)
@@ -376,243 +371,6 @@ void serializeVariant(pugi::xml_node &node, const Variant &variant)
         ss << std::put_time(&variant.value<TimePoint>(), "%Y-%m-%dT%H:%M:%SZ");
         node.append_attribute("value").set_value(ss.str().c_str());
     }
-}
-
-void ByteArray::makeUnique()
-{
-    if(!_data.unique())
-        _data = std::make_unique<PtrType>(_data->begin(), _data->end());
-}
-
-ByteArray::ByteArray(size_t size)
-{
-    _data = std::make_shared<std::vector<char>>();
-    _data->resize(size);
-}
-
-ByteArray::ByteArray(const char *ptr) : ByteArray((size_t)0)
-{
-    size_t len = std::strlen(ptr);
-    if(len)
-    {
-        _data->resize(len);
-        std::memcpy(data(), ptr, len);
-    }
-}
-
-ByteArray::ByteArray(const ByteArray &d)
-{
-    _data = d._data;
-}
-
-char& ByteArray::operator[](size_t i)
-{
-    makeUnique();
-    return (*_data)[i];
-}
-
-const char& ByteArray::operator[](size_t i) const
-{
-    return (*_data)[i];
-}
-
-size_t ByteArray::size() const
-{
-    return _data->size();
-}
-
-void ByteArray::resize(size_t newsize)
-{
-    makeUnique();
-    _data->resize(newsize);
-}
-
-void ByteArray::append(char c)
-{
-    _data->push_back(c);
-}
-
-void ByteArray::decode_base64()
-{
-    int i = 0;
-    Ptr tmp = std::make_unique<PtrType>();
-
-    uint8_t c4[4] = {0};
-    for(uint8_t c : *_data)
-    {
-        if(c >= 'A' && c <= 'Z')c4[i++] = c - 'A';
-        else if(c >= 'a' && c <= 'z')c4[i++] = c - 'a' + 26;
-        else if(c >= '0' && c <= '9')c4[i++] = c - '0' + 52;
-        else if(c == '+')c4[i++] = 62;
-        else if(c == '/')c4[i++] = 63;
-
-        if(i == 4)
-        {
-            tmp->push_back((c4[0] << 2) | (c4[1] >> 4));
-            tmp->push_back((c4[1] << 4) | (c4[2] >> 2));
-            tmp->push_back((c4[2] << 6) | c4[3]);
-            i = 0;
-        }
-    }
-
-    if(i > 1)tmp->push_back((c4[0] << 2) | (c4[1] >> 4));
-    if(i > 2)tmp->push_back((c4[1] << 4) | (c4[2] >> 2));
-
-    std::swap(_data, tmp);
-}
-
-void ByteArray::encode_base64()
-{
-    static const char *base64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    Ptr tmp = std::make_unique<PtrType>();
-    int i = 0;
-    uint8_t sextet[4] = {0};
-    for(uint8_t c : *_data)
-    {
-        switch(i)
-        {
-        case 0:
-            sextet[0] |= c >> 2 & 0x3f;
-            sextet[1] |= c << 4 & 0x3f;
-            i++;
-            break;
-        case 1:
-            sextet[1] |= c >> 4 & 0x3f;
-            sextet[2] |= c << 2 & 0x3f;
-            i++;
-            break;
-        case 2:
-            sextet[2] |= c >> 6 & 0x3f;
-            sextet[3] = c & 0x3f;
-            i = 0;
-            for(int o=0; o<4; o++)
-                tmp->push_back(base64[sextet[o]]);
-            std::memset(sextet, 0, sizeof(sextet));
-            break;
-        }
-    }
-    for(int o = 0; o <= i && i; o++)
-        tmp->push_back(base64[sextet[o]]);
-
-    if(tmp->size() % 4)
-        tmp->resize(tmp->size() + 4 - (tmp->size() % 4), '=');
-    std::swap(_data, tmp);
-}
-
-
-void ByteArray::encode_hex()
-{
-    static const char *hex = "0123456789abcdef";
-    Ptr tmp = std::make_unique<PtrType>(_data->size() * 2);
-    for(size_t i = 0; i< _data->size(); i++)
-    {
-        uint8_t t = static_cast<uint8_t>(_data->at(i));
-        (*tmp)[2*i + 0] = hex[(t & 0xf0) >> 4];
-        (*tmp)[2*i + 1] = hex[t & 0xf];
-    }
-    std::swap(_data, tmp);
-}
-
-void ByteArray::decode_hex()
-{
-    auto toByte = [](char c) -> char
-    {
-        if(c >= '0' && c <= '9')
-            return c - '0';
-        if(c >= 'A' && c <= 'F')
-            return c - '7';
-        if(c >= 'a' && c <= 'f')
-            return c - 'W';
-        return 0;
-    };
-
-    Ptr tmp = std::make_unique<PtrType>(size() / 2);
-    for(size_t i = 0; i< tmp->size(); i++)
-    {
-        (*tmp)[i] = (toByte(_data->at(i*2)) << 4) | toByte(_data->at(i*2+1));
-    }
-    std::swap(_data, tmp);
-}
-
-ByteStream::ByteStream()
-{
-    //setg(_buffer.data(), _buffer.data(), _buffer.data() + _buffer.size());
-}
-
-ByteStream::~ByteStream()
-{
-
-}
-
-const ByteArray &ByteStream::buffer() const
-{
-    return _buffer;
-}
-
-void ByteStream::stats()
-{
-    std::cout << "pbase " << (void*)pbase() << std::endl;
-    std::cout << "pptr  " << (void*)pptr() << std::endl;
-    std::cout << "epptr " << (void*)epptr() << std::endl;
-    std::cout << "eback " << (void*)eback() << std::endl;
-    std::cout << "gptr  " << (void*)gptr() << std::endl;
-    std::cout << "egptr " << (void*)egptr() << std::endl;
-}
-
-ByteStream::pos_type ByteStream::seekoff(off_type, std::ios_base::seekdir, std::ios_base::openmode)
-{
-    return pos_type(off_type(-1));
-}
-
-ByteStream::pos_type ByteStream::seekpos(pos_type, std::ios_base::openmode)
-{
-    return pos_type(off_type(-1));
-}
-
-/*std::streamsize ByteStream::showmanyc()
-{
-    return _buffer.size() - ipos;
-}
-
-std::streamsize ByteStream::xsgetn(char_type *s, std::streamsize n)
-{
-    if((std::streamoff)_buffer.size() > ipos + n)
-    {
-        std::memcpy(s, _buffer.data() + ipos, n);
-        return n;
-    }
-    return pos_type(off_type(-1));
-}
-
-ByteStream::int_type ByteStream::underflow()
-{
-    if(ipos >= (std::streamoff)_buffer.size())return traits_type::eof();
-    return traits_type::to_int_type(_buffer[ipos]);
-}*/
-
-std::streamsize ByteStream::xsputn(const char_type *s, std::streamsize n)
-{
-    if(opos + n >= (std::streamsize)_buffer.size())
-    {
-        _buffer.resize(opos + n);
-        setoptr();
-    }
-
-    std::memcpy(_buffer.data() + opos, s, n);
-    opos += n;
-    return n;
-}
-
-ByteStream::int_type ByteStream::overflow(int_type c)
-{
-    _buffer.append(c);
-    return c;
-}
-
-void ByteStream::setoptr()
-{
-    size_t off = gptr() - eback();
-    setg(_buffer.data(), _buffer.data() + off, _buffer.data() + _buffer.size());
 }
 
 Variant::Type Variant::type() const

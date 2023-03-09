@@ -16,9 +16,14 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.*
  ************************************************************************/
 
-#include "utils.h"
+#include <vector>
+#include <string>
+#include <cstdint>
 
-std::vector<std::string> split_string(const std::string &str, char delimiter)
+namespace LibXISF
+{
+
+std::vector<std::string> splitString(const std::string &str, char delimiter)
 {
     std::vector<std::string> ret;
     size_t cur = 0;
@@ -121,4 +126,6 @@ void sha1(uint8_t *data, size_t len, uint8_t *hash)
     hash[8]  = h2 >> 24 & 0xff; hash[9]  = h2 >> 16 & 0xff; hash[10] = h2 >> 8 & 0xff; hash[11] = h2 & 0xff;
     hash[12] = h3 >> 24 & 0xff; hash[13] = h3 >> 16 & 0xff; hash[14] = h3 >> 8 & 0xff; hash[15] = h3 & 0xff;
     hash[16] = h4 >> 24 & 0xff; hash[17] = h4 >> 16 & 0xff; hash[18] = h4 >> 8 & 0xff; hash[19] = h4 & 0xff;
+}
+
 }

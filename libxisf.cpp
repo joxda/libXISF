@@ -23,10 +23,10 @@
 #include <iostream>
 #include <sstream>
 #include <cstdlib>
-#include "lz4/lz4.h"
-#include "lz4/lz4hc.h"
-#include "pugixml/pugixml.hpp"
-#include "zlib/zlib.h"
+#include <lz4.h>
+#include <lz4hc.h>
+#include <pugixml.hpp>
+#include <zlib.h>
 
 namespace LibXISF
 {

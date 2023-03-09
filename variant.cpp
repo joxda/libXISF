@@ -16,7 +16,6 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.*
  ************************************************************************/
 
-#include "variant.h"
 #include <charconv>
 #include <type_traits>
 #include <map>
@@ -336,7 +335,7 @@ void serializeVariant(pugi::xml_node &node, const Variant &variant)
         }
         node.append_attribute("length").set_value(len);
         node.append_attribute("location").set_value("inline:base64");
-        node.append_child(pugi::node_pcdata).set_value(data.constData(), data.size());
+        node.append_child(pugi::node_pcdata).set_value(data.constData());
     }
     else if(variant.type() >= Variant::Type::I8Matrix && variant.type() <= Variant::Type::C64Matrix)
     {
@@ -363,7 +362,7 @@ void serializeVariant(pugi::xml_node &node, const Variant &variant)
         node.append_attribute("rows").set_value(rows);
         node.append_attribute("columns").set_value(cols);
         node.append_attribute("location").set_value("inline:base64");
-        node.append_child(pugi::node_pcdata).set_value(data.constData(), data.size());
+        node.append_child(pugi::node_pcdata).set_value(data.constData());
     }
     else if(variant.type() == Variant::Type::TimePoint)
     {

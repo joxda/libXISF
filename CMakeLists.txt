@@ -9,37 +9,52 @@ set(CMAKE_C_VISIBILITY_PRESET hidden)
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 
 option(BUILD_SHARED_LIBS "Build using shared libraries" ON)
+option(USE_BUNDLED_LIBS "Use bundled LZ4 PugiXML and Zlib" ON)
+
+if(USE_BUNDLED_LIBS)
+set(THIRD_PARTY_SRC
+    lz4/lz4.c
+    lz4/lz4.h
+    lz4/lz4hc.c
+    lz4/lz4hc.h
+    pugixml/pugixml.cpp
+    zlib/adler32.c
+    zlib/compress.c
+    zlib/crc32.c
+    zlib/deflate.c
+    zlib/gzclose.c
+    zlib/gzlib.c
+    zlib/gzread.c
+    zlib/gzwrite.c
+    zlib/inflate.c
+    zlib/infback.c
+    zlib/inftrees.c
+    zlib/inffast.c
+    zlib/trees.c
+    zlib/uncompr.c
+    zlib/zutil.c)
+else(USE_BUNDLED_LIBS)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(LZ4 liblz4 IMPORTED_TARGET REQUIRED)
+    pkg_check_modules(PUGIXML pugixml IMPORTED_TARGET REQUIRED)
+    pkg_check_modules(ZLIB zlib IMPORTED_TARGET REQUIRED)
+endif(USE_BUNDLED_LIBS)
 
 add_library(XISF
   bytearray.cpp
-  bytearray.h
   libXISF_global.h
   libxisf.cpp
   libxisf.h
   utils.cpp
   variant.cpp
-  variant.h
-  lz4/lz4.c
-  lz4/lz4.h
-  lz4/lz4hc.c
-  lz4/lz4hc.h
-  pugixml/pugixml.cpp
-  zlib/adler32.c
-  zlib/compress.c
-  zlib/crc32.c
-  zlib/deflate.c
-  zlib/gzclose.c
-  zlib/gzlib.c
-  zlib/gzread.c
-  zlib/gzwrite.c
-  zlib/inflate.c
-  zlib/infback.c
-  zlib/inftrees.c
-  zlib/inffast.c
-  zlib/trees.c
-  zlib/uncompr.c
-  zlib/zutil.c
+  ${THIRD_PARTY_SRC}
 )
+
+if(USE_BUNDLED_LIBS)
+    target_include_directories(XISF PRIVATE lz4 pugixml zlib)
+else(USE_BUNDLED_LIBS)
+    target_link_libraries(XISF PUBLIC PkgConfig::LZ4 PkgConfig::PUGIXML PkgConfig::ZLIB)
+endif(USE_BUNDLED_LIBS)
 
 set_target_properties(XISF PROPERTIES VERSION ${PROJECT_VERSION} SOVERSION ${PROJECT_VERSION_MAJOR})
 

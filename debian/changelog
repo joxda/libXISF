@@ -1,3 +1,9 @@
+libxisf (0.2.0-ubuntu1) focal; urgency=medium
+
+  * Rewrite to remove Qt as dependency
+
+ -- Dušan Poizl <nou@nouspiro.space>  Fri, 10 Mar 2023 22:10:01 +0100
+
 libxisf (0.1.3-ubuntu1) focal; urgency=medium
 
   * Write missing pixelStorage attribute

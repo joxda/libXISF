@@ -33,6 +33,9 @@ set(THIRD_PARTY_SRC
     zlib/trees.c
     zlib/uncompr.c
     zlib/zutil.c)
+    set(ZLIB_PC ${CMAKE_CURRENT_BINARY_DIR}/zlib.pc)
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/zlib/zlib.pc.cmakein ${ZLIB_PC} @ONLY)
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/zlib/zconf.h.cmakein ${CMAKE_CURRENT_BINARY_DIR}/zconf.h @ONLY)
 else(USE_BUNDLED_LIBS)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(LZ4 liblz4 IMPORTED_TARGET REQUIRED)

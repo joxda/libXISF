@@ -131,7 +131,7 @@ void DataBlock::decompress(const ByteArray &input, const String &encoding)
     case Zlib:
     {
         data.resize(uncompressedSize);
-        uint64_t size = uncompressedSize;
+        uLongf size = uncompressedSize;
         ::uncompress((Bytef*)data.data(), &size, (Bytef*)tmp.data(), tmp.size());
         break;
     }
@@ -169,7 +169,7 @@ void DataBlock::compress(int sampleFormatSize)
     case Zlib:
     {
         data.resize(compressBound(uncompressedSize));
-        size_t compressedSize = data.size();
+        uLongf compressedSize = data.size();
         if(::compress2((Bytef*)data.data(), &compressedSize, (Bytef*)tmp.data(), tmp.size(), compressLevel) != Z_OK)
             throw Error("Zlib compression failed");
         data.resize(compressedSize);

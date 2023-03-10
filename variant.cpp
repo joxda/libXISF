@@ -175,6 +175,7 @@ void toCharsVector(const Variant &v, size_t &len, ByteArray &data)
     data.resize(size);
     std::memcpy(data.data(), &v.value<T>()[0], size);
     data.encodeBase64();
+    data.append('\0');
 }
 
 template<typename T>
@@ -186,6 +187,7 @@ void toCharsMatrix(const Variant &v, size_t &rows, size_t &cols, ByteArray &data
     data.resize(size);
     std::memcpy(data.data(), &v.value<T>()(0, 0), size);
     data.encodeBase64();
+    data.append('\0');
 }
 
 void deserializeVariant(const pugi::xml_node &node, Variant &variant, const ByteArray &data)

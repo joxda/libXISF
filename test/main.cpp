@@ -54,7 +54,7 @@ int main(int argc, char **argv)
             m(0, 2) = 2;
             m(1, 0) = 10;
             image.addProperty(Property("UI16Matrix", m));
-            std::tm tm = {12, 22, 23, 1, 2, 2023, 0, 0, 0, 0, 0};
+            std::tm tm = {12, 22, 23, 1, 2, 2023, 0, 0, 0};
             image.addProperty(Property("TimeObs", tm));
             image.addFITSKeyword({"RA", "226.9751163116387", "Right ascension of the center of the image (deg)"});
             image.addFITSKeyword({"DEC", "62.02302376908295", "Declination of the center of the image (deg)"});

@@ -135,7 +135,7 @@ typedef Matrix<double> F64Matrix;
 typedef Matrix<Complex32> C32Matrix;
 typedef Matrix<Complex64> C64Matrix;
 
-class Variant
+class LIBXISF_EXPORT Variant
 {
     using StdVariant = std::variant<std::monostate, Boolean, Int8, UInt8, Int16, UInt16, Int32, UInt32, Int64, UInt64, Float32, Float64,
         Complex32, Complex64, String, TimePoint,

@@ -127,8 +127,8 @@ T fromCharsComplex(const char *beg, const char *end)
     std::regex regex("\\(([^,]+),([^)]+)\\)");
     if(std::regex_match(beg, end, match, regex))
     {
-        std::from_chars(match[1].first, match[1].second, val.real);
-        std::from_chars(match[2].first, match[2].second, val.imag);
+        val.real = std::stod(std::string(match[1].first, match[1].second));
+        val.imag = std::stod(std::string(match[1].first, match[1].second));
     }
     return val;
 }
@@ -212,8 +212,8 @@ void deserializeVariant(const pugi::xml_node &node, Variant &variant, const Byte
         case Variant::Type::UInt32: variant.setValue(fromChars<UInt32>(attr, attr + strlen(attr))); break;
         case Variant::Type::Int64: variant.setValue(fromChars<Int64>(attr, attr + strlen(attr))); break;
         case Variant::Type::UInt64: variant.setValue(fromChars<UInt64>(attr, attr + strlen(attr))); break;
-        case Variant::Type::Float32: variant.setValue(fromChars<Float32>(attr, attr + strlen(attr))); break;
-        case Variant::Type::Float64: variant.setValue(fromChars<Float64>(attr, attr + strlen(attr))); break;
+        case Variant::Type::Float32: variant.setValue(node.attribute("value").as_float()); break;
+        case Variant::Type::Float64: variant.setValue(node.attribute("value").as_double()); break;
         case Variant::Type::Complex32: variant.setValue(fromCharsComplex<Complex32>(attr, attr + strlen(attr))); break;
         case Variant::Type::Complex64: variant.setValue(fromCharsComplex<Complex64>(attr, attr + strlen(attr))); break;
         case Variant::Type::TimePoint:
@@ -288,7 +288,7 @@ void serializeVariant(pugi::xml_node &node, const Variant &variant)
     {
         node.append_attribute("value").set_value(variant.value<Boolean>() ? 1 : 0);
     }
-    else if(variant.type() >= Variant::Type::Int8 && variant.type() <= Variant::Type::Float64)
+    else if(variant.type() >= Variant::Type::Int8 && variant.type() <= Variant::Type::UInt64)
     {
         switch(variant.type())
         {
@@ -300,12 +300,14 @@ void serializeVariant(pugi::xml_node &node, const Variant &variant)
         case Variant::Type::UInt32: toChars<UInt32>(variant, str, end); break;
         case Variant::Type::Int64: toChars<Int64>(variant, str, end); break;
         case Variant::Type::UInt64: toChars<UInt64>(variant, str, end); break;
-        case Variant::Type::Float32: toChars<Float32>(variant, str, end); break;
-        case Variant::Type::Float64: toChars<Float64>(variant, str, end); break;
         default: break;
         }
         node.append_attribute("value").set_value(str);
     }
+    else if(variant.type() == Variant::Type::Float32)
+        node.append_attribute("value").set_value(variant.value<Float32>());
+    else if(variant.type() == Variant::Type::Float64)
+        node.append_attribute("value").set_value(variant.value<Float64>());
     else if(variant.type() == Variant::Type::Complex32 || variant.type() == Variant::Type::Complex64)
     {
         std::string str;
@@ -379,8 +381,8 @@ Variant variantFromString(Variant::Type type, const String &str)
     switch(type)
     {
     case Variant::Type::Int32: variant = fromChars<Int32>(str.c_str(), str.c_str() + str.size()); break;
-    case Variant::Type::Float32: variant = fromChars<Float32>(str.c_str(), str.c_str() + str.size()); break;
-    case Variant::Type::Float64: variant = fromChars<Float64>(str.c_str(), str.c_str() + str.size()); break;
+    case Variant::Type::Float32: variant = std::stof(str); break;
+    case Variant::Type::Float64: variant = std::stod(str); break;
     case Variant::Type::String: variant = str; break;
     case Variant::Type::TimePoint:
     {
@@ -418,7 +420,11 @@ String Variant::toString() const
         std::stringstream ss;
         ss << "{";
         for(auto &i : vector)
-            ss << i << ",";
+        {
+            ss << i;
+            if(i != vector.back())
+                ss << ",";
+        }
         ss << "}";
         return ss.str();
     };
@@ -433,8 +439,8 @@ String Variant::toString() const
     case Variant::Type::UInt32: toChars<UInt32>(_value, str, end); break;
     case Variant::Type::Int64: toChars<Int64>(_value, str, end); break;
     case Variant::Type::UInt64: toChars<UInt64>(_value, str, end); break;
-    case Variant::Type::Float32: toChars<Float32>(_value, str, end); break;
-    case Variant::Type::Float64: toChars<Float64>(_value, str, end); break;
+    case Variant::Type::Float32: string = std::to_string(std::get<Float32>(_value)); break;
+    case Variant::Type::Float64: string = std::to_string(std::get<Float64>(_value)); break;
     case Variant::Type::Complex32: toCharsComplex<Complex32>(_value, string); break;
     case Variant::Type::Complex64: toCharsComplex<Complex64>(_value, string); break;
     case Variant::Type::I8Vector: string = vectorString(std::get<I8Vector>(_value)); break;
@@ -458,7 +464,7 @@ String Variant::toString() const
     default: string = typeName(); break;
     }
 
-    if(type() >= Variant::Type::Int8 && type() <= Variant::Type::Float64)
+    if(type() >= Variant::Type::Int8 && type() <= Variant::Type::UInt64)
         string = str;
 
     return string;

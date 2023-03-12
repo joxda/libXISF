@@ -94,7 +94,14 @@ int main(int argc, char **argv)
             TEST(image.height() != 10, "Invalid height");
             TEST(image.colorSpace() != LibXISF::Image::Gray, "Invalid color space");
             TEST(image.pixelStorage() != LibXISF::Image::Planar, "Invalid pixel storage");
-            TEST(image.compression() != LibXISF::DataBlock::None, "Invalid compression codec");
+            if(std::strstr(argv[1], "lz4"))
+            {
+                TEST(image.compression() != LibXISF::DataBlock::LZ4, "Invalid compression codec");
+            }
+            else
+            {
+                TEST(image.compression() != LibXISF::DataBlock::None, "Invalid compression codec");
+            }
             //TEST(!image.dataBlock.embedded, "Not embedded");
             TEST(image.imageDataSize() != 80*2, "Invalid data size");
         }

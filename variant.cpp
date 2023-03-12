@@ -21,8 +21,9 @@
 #include <map>
 #include <regex>
 #include <iomanip>
+#include <sstream>
 #include "libxisf.h"
-#include "pugixml/pugixml.hpp"
+#include <pugixml.hpp>
 
 namespace LibXISF
 {

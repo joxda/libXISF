@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.14)
 
 project(libXISF VERSION 0.2.1 LANGUAGES CXX C)
 
+include(CMakeDependentOption)
+
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -9,38 +11,54 @@ set(CMAKE_C_VISIBILITY_PRESET hidden)
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 
 option(BUILD_SHARED_LIBS "Build using shared libraries" ON)
-option(USE_BUNDLED_LIBS "Use bundled LZ4 PugiXML and Zlib" ON)
+option(USE_BUNDLED_LIBS "Use bundled LZ4 PugiXML and Zlib. You can still exclude some" ON)
+cmake_dependent_option(USE_BUNDLED_LZ4 "Use bundled LZ4" ON "USE_BUNDLED_LIBS" OFF)
+cmake_dependent_option(USE_BUNDLED_PUGIXML "Use bundled PugiXML" ON "USE_BUNDLED_LIBS" OFF)
+cmake_dependent_option(USE_BUNDLED_ZLIB "Use bundled Zlib" ON "USE_BUNDLED_LIBS" OFF)
+
+find_package(PkgConfig REQUIRED)
 
 if(USE_BUNDLED_LIBS)
-set(THIRD_PARTY_SRC
-    lz4/lz4.c
-    lz4/lz4.h
-    lz4/lz4hc.c
-    lz4/lz4hc.h
-    pugixml/pugixml.cpp
-    zlib/adler32.c
-    zlib/compress.c
-    zlib/crc32.c
-    zlib/deflate.c
-    zlib/gzclose.c
-    zlib/gzlib.c
-    zlib/gzread.c
-    zlib/gzwrite.c
-    zlib/inflate.c
-    zlib/infback.c
-    zlib/inftrees.c
-    zlib/inffast.c
-    zlib/trees.c
-    zlib/uncompr.c
-    zlib/zutil.c)
-    set(ZLIB_PC ${CMAKE_CURRENT_BINARY_DIR}/zlib.pc)
-    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/zlib/zlib.pc.cmakein ${ZLIB_PC} @ONLY)
-    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/zlib/zconf.h.cmakein ${CMAKE_CURRENT_BINARY_DIR}/zconf.h @ONLY)
-else(USE_BUNDLED_LIBS)
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(LZ4 liblz4 IMPORTED_TARGET REQUIRED)
-    pkg_check_modules(PUGIXML pugixml IMPORTED_TARGET REQUIRED)
-    pkg_check_modules(ZLIB zlib IMPORTED_TARGET REQUIRED)
+    if(USE_BUNDLED_LZ4)
+        list(APPEND THIRD_PARTY_SRC
+            lz4/lz4.c
+            lz4/lz4.h
+            lz4/lz4hc.c
+            lz4/lz4hc.h)
+        list(APPEND THIRD_PARTY_INCLUDE lz4)
+    else(USE_BUNDLED_LZ4)
+        pkg_check_modules(LZ4 liblz4 IMPORTED_TARGET REQUIRED)
+    endif(USE_BUNDLED_LZ4)
+    if(USE_BUNDLED_PUGIXML)
+        list(APPEND THIRD_PARTY_SRC pugixml/pugixml.cpp)
+        list(APPEND THIRD_PARTY_INCLUDE pugixml)
+    else(USE_BUNDLED_PUGIXML)
+        pkg_check_modules(PUGIXML pugixml IMPORTED_TARGET REQUIRED)
+    endif(USE_BUNDLED_PUGIXML)
+    if(USE_BUNDLED_ZLIB)
+        list(APPEND THIRD_PARTY_SRC
+            zlib/adler32.c
+            zlib/compress.c
+            zlib/crc32.c
+            zlib/deflate.c
+            zlib/gzclose.c
+            zlib/gzlib.c
+            zlib/gzread.c
+            zlib/gzwrite.c
+            zlib/inflate.c
+            zlib/infback.c
+            zlib/inftrees.c
+            zlib/inffast.c
+            zlib/trees.c
+            zlib/uncompr.c
+            zlib/zutil.c)
+        set(ZLIB_PC ${CMAKE_CURRENT_BINARY_DIR}/zlib.pc)
+        configure_file(${CMAKE_CURRENT_SOURCE_DIR}/zlib/zlib.pc.cmakein ${ZLIB_PC} @ONLY)
+        configure_file(${CMAKE_CURRENT_SOURCE_DIR}/zlib/zconf.h.cmakein ${CMAKE_CURRENT_BINARY_DIR}/zconf.h @ONLY)
+        list(APPEND THIRD_PARTY_INCLUDE zlib)
+    else(USE_BUNDLED_ZLIB)
+        pkg_check_modules(ZLIB zlib IMPORTED_TARGET REQUIRED)
+    endif(USE_BUNDLED_ZLIB)
 endif(USE_BUNDLED_LIBS)
 
 add_library(XISF
@@ -54,7 +72,16 @@ add_library(XISF
 )
 
 if(USE_BUNDLED_LIBS)
-    target_include_directories(XISF PRIVATE lz4 pugixml zlib)
+    target_include_directories(XISF PRIVATE ${THIRD_PARTY_INCLUDE})
+    if(NOT USE_BUNDLED_LZ4)
+        target_link_libraries(XISF PUBLIC PkgConfig::LZ4)
+    endif(NOT USE_BUNDLED_LZ4)
+    if(NOT USE_BUNDLED_PUGIXML)
+        target_link_libraries(XISF PUBLIC PkgConfig::PUGIXML)
+    endif(NOT USE_BUNDLED_PUGIXML)
+    if(NOT USE_BUNDLED_ZLIB)
+        target_link_libraries(XISF PUBLIC PkgConfig::ZLIB)
+    endif(NOT USE_BUNDLED_ZLIB)
 else(USE_BUNDLED_LIBS)
     target_link_libraries(XISF PUBLIC PkgConfig::LZ4 PkgConfig::PUGIXML PkgConfig::ZLIB)
 endif(USE_BUNDLED_LIBS)

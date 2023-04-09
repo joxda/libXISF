@@ -18,48 +18,46 @@ cmake_dependent_option(USE_BUNDLED_ZLIB "Use bundled Zlib" ON "USE_BUNDLED_LIBS"
 
 find_package(PkgConfig REQUIRED)
 
-if(USE_BUNDLED_LIBS)
-    if(USE_BUNDLED_LZ4)
-        list(APPEND THIRD_PARTY_SRC
-            lz4/lz4.c
-            lz4/lz4.h
-            lz4/lz4hc.c
-            lz4/lz4hc.h)
-        list(APPEND THIRD_PARTY_INCLUDE lz4)
-    else(USE_BUNDLED_LZ4)
-        pkg_check_modules(LZ4 liblz4 IMPORTED_TARGET REQUIRED)
-    endif(USE_BUNDLED_LZ4)
-    if(USE_BUNDLED_PUGIXML)
-        list(APPEND THIRD_PARTY_SRC pugixml/pugixml.cpp)
-        list(APPEND THIRD_PARTY_INCLUDE pugixml)
-    else(USE_BUNDLED_PUGIXML)
-        pkg_check_modules(PUGIXML pugixml IMPORTED_TARGET REQUIRED)
-    endif(USE_BUNDLED_PUGIXML)
-    if(USE_BUNDLED_ZLIB)
-        list(APPEND THIRD_PARTY_SRC
-            zlib/adler32.c
-            zlib/compress.c
-            zlib/crc32.c
-            zlib/deflate.c
-            zlib/gzclose.c
-            zlib/gzlib.c
-            zlib/gzread.c
-            zlib/gzwrite.c
-            zlib/inflate.c
-            zlib/infback.c
-            zlib/inftrees.c
-            zlib/inffast.c
-            zlib/trees.c
-            zlib/uncompr.c
-            zlib/zutil.c)
-        set(ZLIB_PC ${CMAKE_CURRENT_BINARY_DIR}/zlib.pc)
-        configure_file(${CMAKE_CURRENT_SOURCE_DIR}/zlib/zlib.pc.cmakein ${ZLIB_PC} @ONLY)
-        configure_file(${CMAKE_CURRENT_SOURCE_DIR}/zlib/zconf.h.cmakein ${CMAKE_CURRENT_BINARY_DIR}/zconf.h @ONLY)
-        list(APPEND THIRD_PARTY_INCLUDE zlib)
-    else(USE_BUNDLED_ZLIB)
-        pkg_check_modules(ZLIB zlib IMPORTED_TARGET REQUIRED)
-    endif(USE_BUNDLED_ZLIB)
-endif(USE_BUNDLED_LIBS)
+if(USE_BUNDLED_LZ4)
+    list(APPEND THIRD_PARTY_SRC
+        lz4/lz4.c
+        lz4/lz4.h
+        lz4/lz4hc.c
+        lz4/lz4hc.h)
+    list(APPEND THIRD_PARTY_INCLUDE lz4)
+else(USE_BUNDLED_LZ4)
+    pkg_check_modules(LZ4 liblz4 IMPORTED_TARGET REQUIRED)
+endif(USE_BUNDLED_LZ4)
+if(USE_BUNDLED_PUGIXML)
+    list(APPEND THIRD_PARTY_SRC pugixml/pugixml.cpp)
+    list(APPEND THIRD_PARTY_INCLUDE pugixml)
+else(USE_BUNDLED_PUGIXML)
+    pkg_check_modules(PUGIXML pugixml IMPORTED_TARGET REQUIRED)
+endif(USE_BUNDLED_PUGIXML)
+if(USE_BUNDLED_ZLIB)
+    list(APPEND THIRD_PARTY_SRC
+        zlib/adler32.c
+        zlib/compress.c
+        zlib/crc32.c
+        zlib/deflate.c
+        zlib/gzclose.c
+        zlib/gzlib.c
+        zlib/gzread.c
+        zlib/gzwrite.c
+        zlib/inflate.c
+        zlib/infback.c
+        zlib/inftrees.c
+        zlib/inffast.c
+        zlib/trees.c
+        zlib/uncompr.c
+        zlib/zutil.c)
+    set(ZLIB_PC ${CMAKE_CURRENT_BINARY_DIR}/zlib.pc)
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/zlib/zlib.pc.cmakein ${ZLIB_PC} @ONLY)
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/zlib/zconf.h.cmakein ${CMAKE_CURRENT_BINARY_DIR}/zconf.h @ONLY)
+    list(APPEND THIRD_PARTY_INCLUDE zlib)
+else(USE_BUNDLED_ZLIB)
+    pkg_check_modules(ZLIB zlib IMPORTED_TARGET REQUIRED)
+endif(USE_BUNDLED_ZLIB)
 
 add_library(XISF
   bytearray.cpp

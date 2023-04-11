@@ -1,4 +1,10 @@
-libxisf (0.2.0-ubuntu2) UNRELEASED; urgency=medium
+libxisf (0.2.3-ubuntu1) focal; urgency=medium
+
+  * Fix Color filter array
+
+ -- Dušan Poizl <nou@nouspiro.space>  Tue, 11 Apr 2023 12:39:41 +0200
+
+libxisf (0.2.0-ubuntu2) focal; urgency=medium
 
   * Fix lintian errors
 

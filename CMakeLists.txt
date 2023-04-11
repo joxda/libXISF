@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.14)
 
-project(libXISF VERSION 0.2.2 LANGUAGES CXX C)
+project(libXISF VERSION 0.2.3 LANGUAGES CXX C)
 
 include(CMakeDependentOption)
 

@@ -912,7 +912,7 @@ void XISFWriterPrivate::writeImageElement(pugi::xml_node &node, const Image &ima
 
     if(image._cfa.width && image._cfa.height)
     {
-        pugi::xml_node cfa_node = node.append_child("ColorFilterArray");
+        pugi::xml_node cfa_node = image_node.append_child("ColorFilterArray");
         cfa_node.append_attribute("pattern").set_value(image._cfa.pattern.c_str());
         cfa_node.append_attribute("width").set_value(image._cfa.width);
         cfa_node.append_attribute("height").set_value(image._cfa.height);

@@ -16,7 +16,7 @@ cmake_dependent_option(USE_BUNDLED_LZ4 "Use bundled LZ4" ON "USE_BUNDLED_LIBS" O
 cmake_dependent_option(USE_BUNDLED_PUGIXML "Use bundled PugiXML" ON "USE_BUNDLED_LIBS" OFF)
 cmake_dependent_option(USE_BUNDLED_ZLIB "Use bundled Zlib" ON "USE_BUNDLED_LIBS" OFF)
 
-find_package(PkgConfig REQUIRED)
+find_package(PkgConfig)
 
 if(USE_BUNDLED_LZ4)
     list(APPEND THIRD_PARTY_SRC

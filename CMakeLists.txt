@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.14)
 
-project(libXISF VERSION 0.2.3 LANGUAGES CXX C)
+project(libXISF VERSION 0.2.3 LANGUAGES CXX C
+    HOMEPAGE_URL https://gitea.nouspiro.space/nou/libXISF
+    DESCRIPTION "LibXISF is C++ library that can read and write XISF files produced by PixInsight.")
 
 include(CMakeDependentOption)
 
@@ -73,15 +75,19 @@ if(USE_BUNDLED_LIBS)
     target_include_directories(XISF PRIVATE ${THIRD_PARTY_INCLUDE})
     if(NOT USE_BUNDLED_LZ4)
         target_link_libraries(XISF PUBLIC PkgConfig::LZ4)
+        list(APPEND PC_LIBS_REQUIRE lz4)
     endif(NOT USE_BUNDLED_LZ4)
     if(NOT USE_BUNDLED_PUGIXML)
         target_link_libraries(XISF PUBLIC PkgConfig::PUGIXML)
+        list(APPEND PC_LIBS_REQUIRE pugixml)
     endif(NOT USE_BUNDLED_PUGIXML)
     if(NOT USE_BUNDLED_ZLIB)
         target_link_libraries(XISF PUBLIC PkgConfig::ZLIB)
+        list(APPEND PC_LIBS_REQUIRE zlib)
     endif(NOT USE_BUNDLED_ZLIB)
 else(USE_BUNDLED_LIBS)
     target_link_libraries(XISF PUBLIC PkgConfig::LZ4 PkgConfig::PUGIXML PkgConfig::ZLIB)
+    list(APPEND PC_LIBS_REQUIRE lz4 pugixml zlib)
 endif(USE_BUNDLED_LIBS)
 
 set_target_properties(XISF PROPERTIES VERSION ${PROJECT_VERSION} SOVERSION ${PROJECT_VERSION_MAJOR})
@@ -97,7 +103,10 @@ set(XISF_PUBLIC_HEADERS libxisf.h libXISF_global.h)
 include(GNUInstallDirs)
 
 install(FILES ${XISF_PUBLIC_HEADERS} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libxisf.pc DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
 install(TARGETS XISF LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+
+configure_file(libxisf.pc.in libxisf.pc @ONLY)
 
 #testing
 

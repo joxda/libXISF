@@ -364,9 +364,14 @@ public:
     int imagesCount() const;
     /** Return reference to Image
      *  @param n index of image
-     *  @param readPixel when false it will read pixel data from file and imageData()
-     *  will return nullptr */
+     *  @param readPixel when false it will not read pixel data from file and imageData()
+     *  will return nullptr. Other properties like width, height, format etc will be returned correctly */
     const Image& getImage(uint32_t n, bool readPixels = true);
+    /**
+     * @brief getThumbnail
+     * @return image thumbnail
+     */
+    const Image& getThumbnail();
 private:
     XISFReaderPrivate *p;
 };

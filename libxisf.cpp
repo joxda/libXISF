@@ -520,6 +520,7 @@ public:
      *  @param readPixel when false it will read pixel data from file and imageData()
      *  will return nullptr */
     const Image& getImage(uint32_t n, bool readPixels = true);
+    const Image& getThumbnail();
 private:
     void readXISFHeader();
     void readSignature();
@@ -532,6 +533,7 @@ private:
 
     std::unique_ptr<std::istream> _io;
     std::vector<Image> _images;
+    Image _thumbnail;
     std::vector<Property> _properties;
 };
 
@@ -588,6 +590,19 @@ const Image& XISFReaderPrivate::getImage(uint32_t n, bool readPixels)
     return img;
 }
 
+const Image &XISFReaderPrivate::getThumbnail()
+{
+    Image &img = _thumbnail;
+    if(_thumbnail._dataBlock.attachmentPos)
+    {
+        _io->seekg(img._dataBlock.attachmentPos);
+        ByteArray data(img._dataBlock.attachmentSize);
+        _io->read(data.data(), data.size());
+        img._dataBlock.decompress(data);
+    }
+    return _thumbnail;
+}
+
 void XISFReaderPrivate::readXISFHeader()
 {
     uint32_t headerLen[2] = {0};
@@ -608,6 +623,9 @@ void XISFReaderPrivate::readXISFHeader()
 
         for(auto &property : root.children("Property"))
             _properties.push_back(parseProperty(property));
+
+        if(root.child("Thumbnail"))
+            _thumbnail = parseImage(root.child("Thumbnail"));
     }
     else throw Error("Unknown root XML element");
 }
@@ -783,6 +801,9 @@ Image XISFReaderPrivate::parseImage(const pugi::xml_node &node)
         DataBlock icc = parseDataBlock(node.child("ICCProfile"));
         image._iccProfile = icc.data;
     }
+
+    if(node.child("Thumbnail") && std::strcmp(node.name(), "Thumbnail"))
+        _thumbnail = parseImage(node.child("Thumbnail"));
 
     return image;
 }
@@ -1032,6 +1053,11 @@ int XISFReader::imagesCount() const
 const Image &XISFReader::getImage(uint32_t n, bool readPixels)
 {
     return p->getImage(n, readPixels);
+}
+
+const Image &XISFReader::getThumbnail()
+{
+    return p->getThumbnail();
 }
 
 XISFWriter::XISFWriter()

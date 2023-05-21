@@ -27,6 +27,7 @@
 #include <lz4hc.h>
 #include <pugixml.hpp>
 #include <zlib.h>
+#include "streambuffer.h"
 
 namespace LibXISF
 {
@@ -532,6 +533,7 @@ private:
     Image parseImage(const pugi::xml_node &node);
 
     std::unique_ptr<std::istream> _io;
+    std::unique_ptr<StreamBuffer> _buffer;
     std::vector<Image> _images;
     Image _thumbnail;
     std::vector<Property> _properties;
@@ -548,8 +550,8 @@ void XISFReaderPrivate::open(const String &name)
 void XISFReaderPrivate::open(const ByteArray &data)
 {
     close();
-    std::string str((char*)data.data(), data.size());
-    _io = std::make_unique<std::istringstream>(str, std::ios_base::in | std::ios_base::binary);
+    _buffer = std::make_unique<StreamBuffer>(data);
+    _io = std::make_unique<std::istream>(_buffer.get());
     readSignature();
     readXISFHeader();
 }
@@ -565,6 +567,7 @@ void XISFReaderPrivate::open(std::istream *io)
 void XISFReaderPrivate::close()
 {
     _io.reset();
+    _buffer.reset();
     _images.clear();
     _properties.clear();
 }
@@ -839,10 +842,10 @@ void XISFWriterPrivate::save(const String &name)
 
 void XISFWriterPrivate::save(ByteArray &data)
 {
-    std::ostringstream oss;
+    StreamBuffer buffer;
+    std::ostream oss(&buffer);
     save(oss);
-    std::string str = oss.str();
-    data = ByteArray(str.data(), str.size());
+    data = buffer.byteArray();
 }
 
 void XISFWriterPrivate::save(std::ostream &io)

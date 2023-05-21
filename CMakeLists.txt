@@ -66,6 +66,8 @@ add_library(XISF
   libXISF_global.h
   libxisf.cpp
   libxisf.h
+  streambuffer.cpp
+  streambuffer.h
   utils.cpp
   variant.cpp
   ${THIRD_PARTY_SRC}

@@ -301,6 +301,8 @@ public:
      *  For example OBSERVER => Observer:Name, SITELAT => Observation:Location:Latitude
     */
     bool addFITSKeywordAsProperty(const String &name, const String &value);
+    const ByteArray& iccProfile() const;
+    void setIccProfile(const ByteArray &iccProfile);
 
     void* imageData();
     const void* imageData() const;

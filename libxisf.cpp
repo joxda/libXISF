@@ -358,6 +358,16 @@ bool Image::addFITSKeywordAsProperty(const String &name, const String &value)
     return false;
 }
 
+const ByteArray &Image::iccProfile() const
+{
+    return _iccProfile;
+}
+
+void Image::setIccProfile(const ByteArray &iccProfile)
+{
+    _iccProfile = iccProfile;
+}
+
 void *Image::imageData()
 {
     return _dataBlock.data.size() ? _dataBlock.data.data() : nullptr;

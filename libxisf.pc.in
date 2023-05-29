@@ -10,4 +10,3 @@ Version: @PROJECT_VERSION@
 Requires.private: @PC_REQUIRE_STR@
 Cflags: -I"${includedir}"
 Libs: -L"${libdir}" -lXISF
-Libs.private: -L"${libdir}" @PC_LIBS_STR@

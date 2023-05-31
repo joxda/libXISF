@@ -2,7 +2,7 @@ libxisf (0.2.4-ubuntu1) focal; urgency=medium
 
   * Add getThumbnail method
 
--- Dušan Poizl <nou@nouspiro.space>  Tue, 19 May 2023 19:23:34
+ -- Dušan Poizl <nou@nouspiro.space>  Tue, 19 May 2023 19:23:34 +0200
 
 libxisf (0.2.3-ubuntu1) focal; urgency=medium
 

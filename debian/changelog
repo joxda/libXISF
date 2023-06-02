@@ -1,3 +1,10 @@
+libxisf (0.2.6-ubuntu1) focal; urgency=medium
+
+  * Add method for ICC profile
+  * pkg-config file support
+
+ -- Dušan Poizl <nou@nouspiro.space>  Fri, 02 Jun 2023 09:16:59 +0200
+
 libxisf (0.2.4-ubuntu1) focal; urgency=medium
 
   * Add getThumbnail method

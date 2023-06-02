@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.14)
 
-project(libXISF VERSION 0.2.4 LANGUAGES CXX C
+project(libXISF VERSION 0.2.6 LANGUAGES CXX C
     HOMEPAGE_URL https://gitea.nouspiro.space/nou/libXISF
     DESCRIPTION "LibXISF is C++ library that can read and write XISF files produced by PixInsight.")
 
@@ -66,6 +66,8 @@ add_library(XISF
   libXISF_global.h
   libxisf.cpp
   libxisf.h
+  streambuffer.cpp
+  streambuffer.h
   utils.cpp
   variant.cpp
   ${THIRD_PARTY_SRC}
@@ -106,6 +108,12 @@ install(FILES ${XISF_PUBLIC_HEADERS} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libxisf.pc DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
 install(TARGETS XISF LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
+list(JOIN PC_LIBS_REQUIRE ", " PC_REQUIRE_STR2)
+if(NOT PC_REQUIRE_STR2 STREQUAL "")
+    string(REPLACE "lz4" "liblz4" PC_REQUIRE_STR ${PC_REQUIRE_STR2})
+endif()
+list(TRANSFORM PC_LIBS_REQUIRE PREPEND "-l")
+list(JOIN PC_LIBS_REQUIRE " " PC_LIBS_STR)
 configure_file(libxisf.pc.in libxisf.pc @ONLY)
 
 #testing

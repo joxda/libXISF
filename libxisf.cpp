@@ -541,6 +541,7 @@ private:
     FITSKeyword parseFITSKeyword(const pugi::xml_node &node);
     ColorFilterArray parseCFA(const pugi::xml_node &node);
     Image parseImage(const pugi::xml_node &node);
+    void readAttachment(DataBlock &dataBlock);
 
     std::unique_ptr<std::istream> _io;
     std::unique_ptr<StreamBuffer> _buffer;
@@ -595,10 +596,7 @@ const Image& XISFReaderPrivate::getImage(uint32_t n, bool readPixels)
     Image &img = _images[n];
     if(img._dataBlock.attachmentPos && readPixels)
     {
-        _io->seekg(img._dataBlock.attachmentPos);
-        ByteArray data(img._dataBlock.attachmentSize);
-        _io->read(data.data(), data.size());
-        img._dataBlock.decompress(data);
+        readAttachment(img._dataBlock);
     }
     return img;
 }
@@ -734,16 +732,9 @@ Property XISFReaderPrivate::parseProperty(const pugi::xml_node &node)
     {
         DataBlock dataBlock = parseDataBlock(node);
         if(dataBlock.attachmentPos)
-        {
-            data.resize(dataBlock.attachmentSize);
-            _io->seekg(dataBlock.attachmentPos);
-            _io->read(data.data(), dataBlock.attachmentSize);
-            dataBlock.decompress(data);
-        }
-        else
-        {
-            data = dataBlock.data;
-        }
+            readAttachment(dataBlock);
+
+        data = dataBlock.data;
     }
 
     deserializeVariant(node, property.value, data);
@@ -812,6 +803,9 @@ Image XISFReaderPrivate::parseImage(const pugi::xml_node &node)
     if(node.child("ICCProfile"))
     {
         DataBlock icc = parseDataBlock(node.child("ICCProfile"));
+        if(icc.attachmentPos)
+            readAttachment(icc);
+
         image._iccProfile = icc.data;
     }
 
@@ -819,6 +813,14 @@ Image XISFReaderPrivate::parseImage(const pugi::xml_node &node)
         _thumbnail = parseImage(node.child("Thumbnail"));
 
     return image;
+}
+
+void XISFReaderPrivate::readAttachment(DataBlock &dataBlock)
+{
+    ByteArray data(dataBlock.attachmentSize);
+    _io->seekg(dataBlock.attachmentPos);
+    _io->read(data.data(), dataBlock.attachmentSize);
+    dataBlock.decompress(data);
 }
 
 class  XISFWriterPrivate

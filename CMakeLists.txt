@@ -92,8 +92,6 @@ else(USE_BUNDLED_LIBS)
     list(APPEND PC_LIBS_REQUIRE lz4 pugixml zlib)
 endif(USE_BUNDLED_LIBS)
 
-target_link_libraries(XISF PUBLIC zstd)
-
 set_target_properties(XISF PROPERTIES VERSION ${PROJECT_VERSION} SOVERSION ${PROJECT_VERSION_MAJOR})
 
 if(BUILD_SHARED_LIBS)

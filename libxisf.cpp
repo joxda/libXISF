@@ -27,6 +27,9 @@
 #include <lz4hc.h>
 #include <pugixml.hpp>
 #include <zlib.h>
+#ifdef HAVE_ZSTD
+#include <zstd.h>
+#endif
 #include "streambuffer.h"
 
 namespace LibXISF
@@ -142,6 +145,15 @@ void DataBlock::decompress(const ByteArray &input, const String &encoding)
         if(LZ4_decompress_safe(tmp.constData(), data.data(), tmp.size(), data.size()) < 0)
             throw Error("LZ4 decompression failed");
         break;
+    case ZSTD:
+#ifdef HAVE_ZSTD
+        data.resize(uncompressedSize);
+        if(ZSTD_isError(ZSTD_decompress(data.data(), data.size(), tmp.constData(), tmp.size())))
+            throw Error("ZSTD decompression failed");
+#else
+        throw Error("ZSTD support not compiled");
+#endif
+        break;
     }
 
     byteUnshuffle(data, byteShuffling);
@@ -192,7 +204,32 @@ void DataBlock::compress(int sampleFormatSize)
         data.resize(compSize);
         break;
     }
+    case ZSTD:
+    {
+#ifdef HAVE_ZSTD
+        size_t compSize = 0;
+        data.resize(ZSTD_compressBound(uncompressedSize));
+        compSize = ZSTD_compress(data.data(), data.size(), tmp.data(), tmp.size(), compressLevel < 0 ? ZSTD_CLEVEL_DEFAULT : compressLevel);
+        if(ZSTD_isError(compSize))
+            throw Error("ZSTD compression failed");
+
+        data.resize(compSize);
+#else
+        throw Error("ZSTD support not compiled");
+#endif
+        break;
     }
+    }
+}
+
+bool DataBlock::CompressionCodecSupported(CompressionCodec codec)
+{
+    (void)codec;
+#ifndef HAVE_ZSTD
+    if(codec == ZSTD)
+        return false;
+#endif
+    return true;
 }
 
 Property::Property(const String &_id, const char *_value) :
@@ -663,6 +700,10 @@ void XISFReaderPrivate::parseCompression(const pugi::xml_node &node, DataBlock &
             dataBlock.codec = DataBlock::LZ4HC;
         else if(compression[0].find("lz4") == 0)
             dataBlock.codec = DataBlock::LZ4;
+#ifdef HAVE_ZSTD
+        else if(compression[0].find("zstd") == 0)
+            dataBlock.codec = DataBlock::ZSTD;
+#endif
         else
             throw Error("Unknown compression codec");
 
@@ -988,6 +1029,12 @@ void XISFWriterPrivate::writeDataBlockAttributes(pugi::xml_node &image_node, con
         codec = "lz4";
     else if(dataBlock.codec == DataBlock::LZ4HC)
         codec = "lz4hc";
+    else if(dataBlock.codec == DataBlock::ZSTD)
+#ifdef HAVE_ZSTD
+        codec = "zstd";
+#else
+        throw Error("ZSTD support not compiled");
+#endif
 
     if(dataBlock.byteShuffling > 1)
         codec += "+sh";
@@ -1149,6 +1196,10 @@ struct Init
                 compressionCodecOverride = DataBlock::LZ4HC;
             else if(compression.find("lz4") == 0)
                 compressionCodecOverride = DataBlock::LZ4;
+#ifdef HAVE_ZSTD
+            else if(compression.find("zstd") == 0)
+                compressionCodecOverride = DataBlock::ZSTD;
+#endif
 
             if(compression.find("+sh") != std::string::npos)
                 byteShuffleOverride = true;

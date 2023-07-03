@@ -94,6 +94,12 @@ endif(USE_BUNDLED_LIBS)
 
 set_target_properties(XISF PROPERTIES VERSION ${PROJECT_VERSION} SOVERSION ${PROJECT_VERSION_MAJOR})
 
+pkg_check_modules(ZSTD libzstd IMPORTED_TARGET)
+if(ZSTD_FOUND)
+    target_compile_definitions(XISF PRIVATE HAVE_ZSTD)
+    target_link_libraries(XISF PUBLIC PkgConfig::ZSTD)
+endif(ZSTD_FOUND)
+
 if(BUILD_SHARED_LIBS)
     target_compile_definitions(XISF PRIVATE LIBXISF_LIBRARY)
 else(BUILD_SHARED_LIBS)

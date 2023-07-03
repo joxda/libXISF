@@ -172,7 +172,8 @@ struct LIBXISF_EXPORT DataBlock
         None,
         Zlib,
         LZ4,
-        LZ4HC
+        LZ4HC,
+        ZSTD
     };
     bool embedded = false;
     uint32_t byteShuffling = 0;
@@ -184,6 +185,8 @@ struct LIBXISF_EXPORT DataBlock
     ByteArray data;
     void decompress(const ByteArray &input, const std::string &encoding = "");
     void compress(int sampleFormatSize);
+    /// ZSTD compression can be disabled at compile time
+    static bool CompressionCodecSupported(CompressionCodec codec);
 };
 
 struct LIBXISF_EXPORT Property

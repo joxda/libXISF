@@ -78,6 +78,17 @@ void benchmarkType(float avg, float stdDev)
         std::cout << "LZ4HC compression   \tElapsed time: " << timer.elapsed() << " " << "ms\tSpeed: "
                   << size/1024.0/1.024/timer.elapsed() << "MiB/s\tRatio: " << baseSize/xisfImage.size() << std::endl;
     }
+    if(DataBlock::CompressionCodecSupported(DataBlock::ZSTD))
+    {
+        image.setCompression(DataBlock::ZSTD);
+        timer.start();
+        XISFWriter writer;
+        writer.writeImage(image);
+        ByteArray xisfImage;
+        writer.save(xisfImage);
+        std::cout << "ZSTD compression   \tElapsed time: " << timer.elapsed() << " " << "ms\tSpeed: "
+                  << size/1024.0/1.024/timer.elapsed() << "MiB/s\tRatio: " << baseSize/xisfImage.size() << std::endl;
+    }
     image.setByteshuffling(true);
     {
         image.setCompression(DataBlock::Zlib);
@@ -107,6 +118,17 @@ void benchmarkType(float avg, float stdDev)
         ByteArray xisfImage;
         writer.save(xisfImage);
         std::cout << "LZ4HC compression SH\tElapsed time: " << timer.elapsed() << " " << "ms\tSpeed: "
+                  << size/1024.0/1.024/timer.elapsed() << "MiB/s\tRatio: " << baseSize/xisfImage.size() << std::endl;
+    }
+    if(DataBlock::CompressionCodecSupported(DataBlock::ZSTD))
+    {
+        image.setCompression(DataBlock::ZSTD);
+        timer.start();
+        XISFWriter writer;
+        writer.writeImage(image);
+        ByteArray xisfImage;
+        writer.save(xisfImage);
+        std::cout << "ZSTD compression SH\tElapsed time: " << timer.elapsed() << " " << "ms\tSpeed: "
                   << size/1024.0/1.024/timer.elapsed() << "MiB/s\tRatio: " << baseSize/xisfImage.size() << std::endl;
     }
 }

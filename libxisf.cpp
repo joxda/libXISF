@@ -27,6 +27,9 @@
 #include <lz4hc.h>
 #include <pugixml.hpp>
 #include <zlib.h>
+#ifdef HAVE_ZSTD
+#include <zstd.h>
+#endif
 #include "streambuffer.h"
 
 namespace LibXISF
@@ -142,6 +145,15 @@ void DataBlock::decompress(const ByteArray &input, const String &encoding)
         if(LZ4_decompress_safe(tmp.constData(), data.data(), tmp.size(), data.size()) < 0)
             throw Error("LZ4 decompression failed");
         break;
+    case ZSTD:
+#ifdef HAVE_ZSTD
+        data.resize(uncompressedSize);
+        if(ZSTD_isError(ZSTD_decompress(data.data(), data.size(), tmp.constData(), tmp.size())))
+            throw Error("ZSTD decompression failed");
+#else
+        throw Error("ZSTD support not compiled");
+#endif
+        break;
     }
 
     byteUnshuffle(data, byteShuffling);
@@ -192,7 +204,32 @@ void DataBlock::compress(int sampleFormatSize)
         data.resize(compSize);
         break;
     }
+    case ZSTD:
+    {
+#ifdef HAVE_ZSTD
+        size_t compSize = 0;
+        data.resize(ZSTD_compressBound(uncompressedSize));
+        compSize = ZSTD_compress(data.data(), data.size(), tmp.data(), tmp.size(), compressLevel < 0 ? ZSTD_CLEVEL_DEFAULT : compressLevel);
+        if(ZSTD_isError(compSize))
+            throw Error("ZSTD compression failed");
+
+        data.resize(compSize);
+#else
+        throw Error("ZSTD support not compiled");
+#endif
+        break;
     }
+    }
+}
+
+bool DataBlock::CompressionCodecSupported(CompressionCodec codec)
+{
+    (void)codec;
+#ifndef HAVE_ZSTD
+    if(codec == ZSTD)
+        return false;
+#endif
+    return true;
 }
 
 Property::Property(const String &_id, const char *_value) :
@@ -541,6 +578,7 @@ private:
     FITSKeyword parseFITSKeyword(const pugi::xml_node &node);
     ColorFilterArray parseCFA(const pugi::xml_node &node);
     Image parseImage(const pugi::xml_node &node);
+    void readAttachment(DataBlock &dataBlock);
 
     std::unique_ptr<std::istream> _io;
     std::unique_ptr<StreamBuffer> _buffer;
@@ -595,10 +633,7 @@ const Image& XISFReaderPrivate::getImage(uint32_t n, bool readPixels)
     Image &img = _images[n];
     if(img._dataBlock.attachmentPos && readPixels)
     {
-        _io->seekg(img._dataBlock.attachmentPos);
-        ByteArray data(img._dataBlock.attachmentSize);
-        _io->read(data.data(), data.size());
-        img._dataBlock.decompress(data);
+        readAttachment(img._dataBlock);
     }
     return img;
 }
@@ -665,6 +700,10 @@ void XISFReaderPrivate::parseCompression(const pugi::xml_node &node, DataBlock &
             dataBlock.codec = DataBlock::LZ4HC;
         else if(compression[0].find("lz4") == 0)
             dataBlock.codec = DataBlock::LZ4;
+#ifdef HAVE_ZSTD
+        else if(compression[0].find("zstd") == 0)
+            dataBlock.codec = DataBlock::ZSTD;
+#endif
         else
             throw Error("Unknown compression codec");
 
@@ -734,16 +773,9 @@ Property XISFReaderPrivate::parseProperty(const pugi::xml_node &node)
     {
         DataBlock dataBlock = parseDataBlock(node);
         if(dataBlock.attachmentPos)
-        {
-            data.resize(dataBlock.attachmentSize);
-            _io->seekg(dataBlock.attachmentPos);
-            _io->read(data.data(), dataBlock.attachmentSize);
-            dataBlock.decompress(data);
-        }
-        else
-        {
-            data = dataBlock.data;
-        }
+            readAttachment(dataBlock);
+
+        data = dataBlock.data;
     }
 
     deserializeVariant(node, property.value, data);
@@ -812,6 +844,9 @@ Image XISFReaderPrivate::parseImage(const pugi::xml_node &node)
     if(node.child("ICCProfile"))
     {
         DataBlock icc = parseDataBlock(node.child("ICCProfile"));
+        if(icc.attachmentPos)
+            readAttachment(icc);
+
         image._iccProfile = icc.data;
     }
 
@@ -819,6 +854,14 @@ Image XISFReaderPrivate::parseImage(const pugi::xml_node &node)
         _thumbnail = parseImage(node.child("Thumbnail"));
 
     return image;
+}
+
+void XISFReaderPrivate::readAttachment(DataBlock &dataBlock)
+{
+    ByteArray data(dataBlock.attachmentSize);
+    _io->seekg(dataBlock.attachmentPos);
+    _io->read(data.data(), dataBlock.attachmentSize);
+    dataBlock.decompress(data);
 }
 
 class  XISFWriterPrivate
@@ -986,6 +1029,12 @@ void XISFWriterPrivate::writeDataBlockAttributes(pugi::xml_node &image_node, con
         codec = "lz4";
     else if(dataBlock.codec == DataBlock::LZ4HC)
         codec = "lz4hc";
+    else if(dataBlock.codec == DataBlock::ZSTD)
+#ifdef HAVE_ZSTD
+        codec = "zstd";
+#else
+        throw Error("ZSTD support not compiled");
+#endif
 
     if(dataBlock.byteShuffling > 1)
         codec += "+sh";
@@ -1147,6 +1196,10 @@ struct Init
                 compressionCodecOverride = DataBlock::LZ4HC;
             else if(compression.find("lz4") == 0)
                 compressionCodecOverride = DataBlock::LZ4;
+#ifdef HAVE_ZSTD
+            else if(compression.find("zstd") == 0)
+                compressionCodecOverride = DataBlock::ZSTD;
+#endif
 
             if(compression.find("+sh") != std::string::npos)
                 byteShuffleOverride = true;

@@ -4,6 +4,7 @@ Maintainer: Dušan Poizl <nou@nouspiro.space>
 Build-Depends: debhelper (>= 9),
                cdbs,
                cmake,
+               libzstd-dev
 Standards-Version: 4.5.0
 Section: libs
 Homepage: https://gitea.nouspiro.space/nou/libXISF

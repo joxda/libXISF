@@ -4,6 +4,10 @@ Maintainer: Dušan Poizl <nou@nouspiro.space>
 Build-Depends: debhelper (>= 9),
                cdbs,
                cmake,
+               pkg-config,
+               liblz4-dev,
+               libpugixml-dev,
+               zlib1g-dev,
                libzstd-dev
 Standards-Version: 4.5.0
 Section: libs
@@ -16,11 +20,25 @@ Architecture: any
 Multi-Arch: same
 Depends: libxisf (= ${binary:Version}), ${misc:Depends}
 Description: Library to load and save XISF images development files
- Native format of PixInsight astroprocessing suite
+ This package contain development files.
+ .
+ XISF is native format of PixInsight astroprocessing suite.
+ Extensible Image Serialization Format (XISF) is the native file format
+ of PixInsight. It is a free, open format for storage, management and
+ interchange of digital images and associated data.
+ .
+ This C++ library implements XISF specification 1.0 which can be found at
+ https://pixinsight.com/doc/docs/XISF-1.0-spec/XISF-1.0-spec.html
 
 Package: libxisf
 Architecture: any
 Multi-Arch: same
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: Library to load and save XISF images
- Native format of PixInsight astroprocessing suite
+ XISF is native format of PixInsight astroprocessing suite.
+ Extensible Image Serialization Format (XISF) is the native file format
+ of PixInsight. It is a free, open format for storage, management and
+ interchange of digital images and associated data.
+ .
+ This C++ library implements XISF specification 1.0 which can be found at
+ https://pixinsight.com/doc/docs/XISF-1.0-spec/XISF-1.0-spec.html

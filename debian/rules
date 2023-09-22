@@ -8,3 +8,9 @@ include /usr/share/cdbs/1/class/cmake.mk
 export CFLAGS := $(shell dpkg-buildflags --get CFLAGS)
 export CXXFLAGS := $(shell dpkg-buildflags --get CXXFLAGS)
 export LDFLAGS := $(shell dpkg-buildflags --get LDFLAGS)
+
+%:
+        dh $@
+
+override_dh_auto_configure:
+        dh_auto_configure -- -DUSE_BUNDLED_LIBS=Off

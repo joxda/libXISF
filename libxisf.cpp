@@ -957,7 +957,7 @@ void XISFWriterPrivate::writeHeader()
         offset += image._dataBlock.data.size();
     }
 
-    uint32_t headerSize = size - sizeof(signature);
+    uint32_t headerSize = header.size() - sizeof(signature);
     header.resize(size, 0);
     header.replace(8, sizeof(uint32_t), (const char*)&headerSize, sizeof(uint32_t));
 

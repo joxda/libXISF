@@ -89,7 +89,7 @@ std::streamsize StreamBuffer::xsgetn(char_type *s, std::streamsize n)
     std::streamsize len = egptr() - gptr();
     if(len > 0)
     {
-        std::streamsize c = std::min(n, len);
+        std::streamsize c = n < len ? n : len;
         std::memcpy(s, gptr(), c);
         gbump(c);
         ret = c;

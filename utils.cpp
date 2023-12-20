@@ -52,7 +52,7 @@ void sha1(uint8_t *data, size_t len, uint8_t *hash)
     nlen += 64 - nlen % 64;
     tmp.resize(nlen, 0);
 
-    size_t ml = len * 8;
+    uint64_t ml = len * 8;
     tmp[nlen - 1] = ml & 0xff;
     tmp[nlen - 2] = ml >>  8 & 0xff;
     tmp[nlen - 3] = ml >> 16 & 0xff;

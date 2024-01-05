@@ -9,7 +9,7 @@ To compile simply run these commands
 ```
 cmake -B build -S .
 cmake --build build --parallel
-cmake --install .
+cmake --install build
 ```
 
 By default it use bundled libraries. If you wish to use external libraries you will may add

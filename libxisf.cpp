@@ -86,12 +86,12 @@ static void byteShuffle(ByteArray &data, int itemSize)
     {
         ByteArray &input = data;
         ByteArray output(input.size());
-        int num = input.size() / itemSize;
+        size_t num = input.size() / itemSize;
         char *s = output.data();
         for(int i=0; i<itemSize; i++)
         {
             const char *u = input.constData() + i;
-            for(int o=0; o<num; o++, s++, u += itemSize)
+            for(size_t o=0; o<num; o++, s++, u += itemSize)
                 *s = *u;
         }
         memcpy(s, input.constData() + num * itemSize, input.size() % itemSize);
@@ -105,12 +105,12 @@ static void byteUnshuffle(ByteArray &data, int itemSize)
     {
         ByteArray &input = data;
         ByteArray output(input.size());
-        int num = input.size() / itemSize;
+        size_t num = input.size() / itemSize;
         const char *s = input.constData();
         for(int i=0; i<itemSize; i++)
         {
             char *u = output.data() + i;
-            for(int o=0; o<num; o++, s++, u += itemSize)
+            for(size_t o=0; o<num; o++, s++, u += itemSize)
                 *u = *s;
         }
         memcpy(output.data() + num * itemSize, s, input.size() % itemSize);
@@ -389,6 +389,10 @@ bool Image::addFITSKeywordAsProperty(const String &name, const String &value)
     {
         auto &c = fitsNameToPropertyIdTypeConvert.at(name);
         Property prop(c.first, variantFromString(c.second, value));
+
+        if(name == "APTDIA" || name == "FOCALLEN")
+            prop.value.value<LibXISF::Float32>() /= 1000.0f;
+
         updateProperty(prop);
         return true;
     }

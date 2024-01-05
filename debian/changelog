@@ -1,3 +1,10 @@
+libxisf (0.2.11-ubuntu1) focal; urgency=medium
+
+  * Fix not loading String properties
+  * Convert aperture and focal length from mm to meters
+
+ -- Dušan Poizl <nou@nouspiro.space>  Fri, 05 Jan 2024 16:18:32 +0100
+
 libxisf (0.2.10-ubuntu1) focal; urgency=medium
 
   * Fix writing incorrect header size

@@ -196,9 +196,12 @@ void deserializeVariant(const pugi::xml_node &node, Variant &variant, const Byte
     std::string type = node.attribute("type").as_string();
     Variant::Type typeId = typeToId[type];
 
-    if(typeId == Variant::Type::String && !node.attribute("location"))
+    if(typeId == Variant::Type::String)
     {
-        variant.setValue(node.text().as_string());
+        if(!node.attribute("location"))
+            variant.setValue(node.text().as_string());
+        else
+            variant.setValue(String(data.constData(), data.size()));
     }
     else if(node.attribute("value"))
     {

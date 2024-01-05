@@ -389,6 +389,10 @@ bool Image::addFITSKeywordAsProperty(const String &name, const String &value)
     {
         auto &c = fitsNameToPropertyIdTypeConvert.at(name);
         Property prop(c.first, variantFromString(c.second, value));
+
+        if(name == "APTDIA" || name == "FOCALLEN")
+            prop.value.value<LibXISF::Float32>() /= 1000.0f;
+
         updateProperty(prop);
         return true;
     }

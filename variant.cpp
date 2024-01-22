@@ -108,8 +108,8 @@ static std::map<Variant::Type, const char*> idToType = {
     {Variant::Type::UI32Matrix,    "UI32Matrix"},
     {Variant::Type::I64Matrix,     "I64Matrix"},
     {Variant::Type::UI64Matrix,    "UI64Matrix"},
-    {Variant::Type::F32Matrix,     "I8Matrix"},
-    {Variant::Type::F64Matrix,     "UI8Matrix"},
+    {Variant::Type::F32Matrix,     "F32Matrix"},
+    {Variant::Type::F64Matrix,     "F64Matrix"},
 };
 
 template<typename T>
@@ -403,6 +403,7 @@ Variant variantFromString(Variant::Type type, const String &str)
 
 Variant::Type Variant::type() const
 {
+    int idx = _value.index();
     return (Variant::Type)_value.index();
 }
 
@@ -433,6 +434,28 @@ String Variant::toString() const
         return ss.str();
     };
 
+    auto matrixString = [](auto matrix) {
+        std::stringstream ss;
+        ss << "{";
+        for(int i=0; i<matrix.rows(); i++)
+        {
+            ss << "{";
+            for(int o=0; o<matrix.cols(); o++)
+            {
+                char str[128] = {0};
+                char *end = str + sizeof(str);
+                std::to_chars(str, end, matrix(i, o));
+                ss << str;
+                if(o < matrix.cols() - 1)
+                    ss << ",";
+            }
+            ss << "}";
+            if(i < matrix.rows() - 1)
+                ss << ",";
+        }
+        return ss.str();
+    };
+
     switch(type())
     {
     case Variant::Type::Int8: toChars<Int8>(_value, str, end); break;
@@ -457,6 +480,8 @@ String Variant::toString() const
     case Variant::Type::UI64Vector: string = vectorString(std::get<UI64Vector>(_value)); break;
     case Variant::Type::F32Vector: string = vectorString(std::get<F32Vector>(_value)); break;
     case Variant::Type::F64Vector: string = vectorString(std::get<F64Vector>(_value)); break;
+    case Variant::Type::F32Matrix: string = matrixString(std::get<F32Matrix>(_value)); break;
+    case Variant::Type::F64Matrix: string = matrixString(std::get<F64Matrix>(_value)); break;
     case Variant::Type::String: string = std::get<String>(_value); break;
     case Variant::Type::TimePoint:
     {

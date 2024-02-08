@@ -442,10 +442,14 @@ String Variant::toString() const
             ss << "{";
             for(int o=0; o<matrix.cols(); o++)
             {
+#if __GNUC__ >= 11 || __clang__
                 char str[128] = {0};
                 char *end = str + sizeof(str);
                 std::to_chars(str, end, matrix(i, o));
                 ss << str;
+#else
+                ss << std::to_string(matrix(i, o));
+#endif
                 if(o < matrix.cols() - 1)
                     ss << ",";
             }

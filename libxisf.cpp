@@ -711,7 +711,7 @@ void XISFReaderPrivate::parseCompression(const pugi::xml_node &node, DataBlock &
         else
             throw Error("Unknown compression codec");
 
-        dataBlock.uncompressedSize = std::stoul(compression[1]);
+        dataBlock.uncompressedSize = std::stoull(compression[1]);
 
         if(compression[0].find("+sh") != std::string::npos)
         {
@@ -741,8 +741,8 @@ DataBlock XISFReaderPrivate::parseDataBlock(const pugi::xml_node &node)
     }
     else if(location.size() >= 3 && location[0] == "attachment")
     {
-        dataBlock.attachmentPos = std::stoul(location[1]);
-        dataBlock.attachmentSize = std::stoul(location[2]);
+        dataBlock.attachmentPos = std::stoull(location[1]);
+        dataBlock.attachmentSize = std::stoull(location[2]);
     }
     else
     {
@@ -818,9 +818,9 @@ Image XISFReaderPrivate::parseImage(const pugi::xml_node &node)
 
     std::vector<std::string> geometry = splitString(node.attribute("geometry").as_string(), ':');
     if(geometry.size() != 3)throw Error("We support only 2D images");
-    image._width = std::stoul(geometry[0]);
-    image._height = std::stoul(geometry[1]);
-    image._channelCount = std::stoul(geometry[2]);
+    image._width = std::stoull(geometry[0]);
+    image._height = std::stoull(geometry[1]);
+    image._channelCount = std::stoull(geometry[2]);
     if(!image._width || !image._height || !image._channelCount)throw Error("Invalid image geometry");
 
     std::vector<std::string> bounds = splitString(node.attribute("bounds").as_string(), ':');

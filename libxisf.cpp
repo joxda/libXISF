@@ -49,6 +49,7 @@ static std::unordered_map<Image::ColorSpace, String> colorSpaceToString;
 static DataBlock::CompressionCodec compressionCodecOverride = DataBlock::None;
 static bool byteShuffleOverride = false;
 static int compressionLevelOverride = -1;
+const size_t GiB = 1073741824;
 
 static const std::unordered_map<String, std::pair<String, Variant::Type>> fitsNameToPropertyIdTypeConvert = {
     {"OBSERVER", {"Observer:Name", Variant::Type::String}},
@@ -864,7 +865,15 @@ void XISFReaderPrivate::readAttachment(DataBlock &dataBlock)
 {
     ByteArray data(dataBlock.attachmentSize);
     _io->seekg(dataBlock.attachmentPos);
-    _io->read(data.data(), dataBlock.attachmentSize);
+    size_t size = dataBlock.attachmentSize;
+    char *ptr = data.data();
+    while(size > 0)
+    {
+        size_t s = std::min(size, GiB);
+        _io->read(ptr, s);
+        size -= s;
+        ptr += s;
+    }
     dataBlock.decompress(data);
 }
 
@@ -913,7 +922,15 @@ void XISFWriterPrivate::save(std::ostream &io)
 
     for(auto &image : _images)
     {
-        io.write(image._dataBlock.data.constData(), image._dataBlock.data.size());
+        const char *ptr = image._dataBlock.data.constData();
+        size_t size = image._dataBlock.data.size();
+        while(size > 0)
+        {
+            size_t s = std::min(size, GiB);
+            io.write(ptr, s);
+            ptr += s;
+            size -= s;
+        }
     }
 }
 

@@ -128,6 +128,9 @@ void DataBlock::decompress(const ByteArray &input, const String &encoding)
     else if(encoding == "base16")
         tmp.decodeHex();
 
+    if(subblocks.size() == 0)
+        subblocks.push_back({tmp.size(), uncompressedSize});
+
     switch(codec)
     {
     case None:
@@ -136,26 +139,54 @@ void DataBlock::decompress(const ByteArray &input, const String &encoding)
     case Zlib:
     {
         data.resize(uncompressedSize);
-        uLongf size = uncompressedSize;
-        ::uncompress((Bytef*)data.data(), &size, (Bytef*)tmp.data(), tmp.size());
+        const char *srcPtr = tmp.constData();
+        char *dstPtr = data.data();
+        for(auto &block : subblocks)
+        {
+            uLongf size = block.second;
+            ::uncompress((Bytef*)dstPtr, &size, (const Bytef*)srcPtr, block.first);
+            srcPtr += block.first;
+            dstPtr += block.second;
+        }
         break;
     }
     case LZ4:
     case LZ4HC:
+    {
         data.resize(uncompressedSize);
-        if(LZ4_decompress_safe(tmp.constData(), data.data(), tmp.size(), data.size()) < 0)
-            throw Error("LZ4 decompression failed");
+        const char *srcPtr = tmp.constData();
+        char *dstPtr = data.data();
+        for(auto &block : subblocks)
+        {
+            if(LZ4_decompress_safe(srcPtr, dstPtr, block.first, block.second) < 0)
+                throw Error("LZ4 decompression failed");
+            srcPtr += block.first;
+            dstPtr += block.second;
+        }
         break;
+    }
     case ZSTD:
 #ifdef HAVE_ZSTD
+    {
         data.resize(uncompressedSize);
-        if(ZSTD_isError(ZSTD_decompress(data.data(), data.size(), tmp.constData(), tmp.size())))
-            throw Error("ZSTD decompression failed");
+        const char *srcPtr = tmp.constData();
+        char *dstPtr = data.data();
+        for(auto &block : subblocks)
+        {
+            if(ZSTD_isError(ZSTD_decompress(dstPtr, block.second, srcPtr, block.first)))
+                throw Error("ZSTD decompression failed");
+            srcPtr += block.first;
+            dstPtr += block.second;
+        }
+
 #else
         throw Error("ZSTD support not compiled");
 #endif
         break;
     }
+    }
+
+    subblocks.clear();
 
     byteUnshuffle(data, byteShuffling);
     attachmentPos = 0;
@@ -182,26 +213,48 @@ void DataBlock::compress(int sampleFormatSize)
         break;
     case Zlib:
     {
-        data.resize(compressBound(uncompressedSize));
-        uLongf compressedSize = data.size();
-        if(::compress2((Bytef*)data.data(), &compressedSize, (Bytef*)tmp.data(), tmp.size(), compressLevel) != Z_OK)
-            throw Error("Zlib compression failed");
-        data.resize(compressedSize);
+        int64_t size = tmp.size();
+        int64_t compSize = 0;
+        int64_t inPtr = 0;
+        while(inPtr < size)
+        {
+            int64_t inSize = UINT32_MAX < size - inPtr ? UINT32_MAX : size - inPtr;
+            data.resize(compSize + compressBound(inSize));
+            uLongf outSize = data.size() - compSize;
+            if(::compress2((Bytef*)data.data() + compSize, &outSize, (const Bytef*)tmp.constData() + inPtr, inSize, compressLevel) != Z_OK)
+                throw Error("Zlib compression failed");
+
+            compSize += outSize;
+            inPtr += inSize;
+            subblocks.push_back({outSize, inSize});
+        }
+        data.resize(compSize);
         break;
     }
     case LZ4:
     case LZ4HC:
     {
-        int compSize = 0;
-        data.resize(LZ4_compressBound(tmp.size()));
-        if(codec == LZ4)
-            compSize = LZ4_compress_default(tmp.constData(), data.data(), tmp.size(), data.size());
-        else
-            compSize = LZ4_compress_HC(tmp.constData(), data.data(), tmp.size(), data.size(), compressLevel < 0 ? LZ4HC_CLEVEL_DEFAULT : compressLevel);
+        int64_t size = tmp.size();
+        int64_t compSize = 0;
+        int64_t inPtr = 0;
+        while(inPtr < size)
+        {
+            int64_t inSize = LZ4_MAX_INPUT_SIZE < size - inPtr ? LZ4_MAX_INPUT_SIZE : size - inPtr;
+            data.resize(compSize + LZ4_compressBound(inSize));
+            int outSize = 0;
 
-        if(compSize <= 0)
-            throw Error("LZ4 compression failed");
+            if(codec == LZ4)
+                outSize = LZ4_compress_default(tmp.constData() + inPtr, data.data() + compSize, inSize, data.size() - compSize);
+            else
+                outSize = LZ4_compress_HC(tmp.constData() + inPtr, data.data() + compSize, inSize, data.size() - compSize, compressLevel < 0 ? LZ4HC_CLEVEL_DEFAULT : compressLevel);
 
+            if(outSize <= 0)
+                throw Error("LZ4 compression failed");
+
+            compSize += outSize;
+            inPtr += inSize;
+            subblocks.push_back({outSize, inSize});
+        }
         data.resize(compSize);
         break;
     }
@@ -721,6 +774,18 @@ void XISFReaderPrivate::parseCompression(const pugi::xml_node &node, DataBlock &
             else
                 throw Error("Missing byte shuffling size");
         }
+
+        if(node.attribute("subblocks"))
+        {
+            std::vector<std::string> subblocks = splitString(node.attribute("subblocks").as_string(), ':');
+            for(auto &block : subblocks)
+            {
+                size_t pos = 0;
+                size_t comp = std::stoull(block, &pos);
+                size_t deco = std::stoull(block.substr(pos+1));
+                dataBlock.subblocks.push_back({comp, deco});
+            }
+        }
     }
 }
 
@@ -1068,6 +1133,19 @@ void XISFWriterPrivate::writeDataBlockAttributes(pugi::xml_node &image_node, con
             codec += ":" + std::to_string(dataBlock.byteShuffling);
 
         image_node.append_attribute("compression").set_value(codec.c_str());
+    }
+
+    if(!dataBlock.subblocks.empty())
+    {
+        std::string subblocks;
+        for(auto i = dataBlock.subblocks.begin(); i != dataBlock.subblocks.end(); i++)
+        {
+            if(i != dataBlock.subblocks.begin())
+                subblocks += ":";
+
+            subblocks += std::to_string(i->first) + "," + std::to_string(i->second);
+        }
+        image_node.append_attribute("subblocks").set_value(subblocks.c_str());
     }
 }
 

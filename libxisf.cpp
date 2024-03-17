@@ -1019,7 +1019,8 @@ void XISFWriterPrivate::writeImageElement(pugi::xml_node &node, const Image &ima
     if(image._iccProfile.size())
     {
         ByteArray base64 = image._iccProfile;
-        base64.decodeBase64();
+        base64.encodeBase64();
+        base64.append('\0');
         pugi::xml_node icc_node = image_node.append_child("ICCProfile");
         icc_node.append_attribute("location").set_value("inline:base64");
         icc_node.append_child(pugi::node_pcdata).set_value(base64.data());

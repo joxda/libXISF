@@ -956,6 +956,7 @@ private:
     void writePropertyElement(pugi::xml_node &node, const Property &property);
     void writeFITSKeyword(pugi::xml_node &node, const FITSKeyword &keyword);
     void writeMetadata(pugi::xml_node &node);
+    void updateImageAttachmentPos(pugi::xml_node &root, size_t offset);
     ByteArray _xisfHeader;
     ByteArray _attachmentsData;
     std::vector<Image> _images;
@@ -1026,25 +1027,26 @@ void XISFWriterPrivate::writeHeader()
 
     writeMetadata(root);
 
-    std::stringstream xml;
-    xml.write(signature, sizeof(signature));
-    doc.save(xml, "", pugi::format_raw);
-
-    std::string header = xml.str();
-    uint32_t size = header.size();
-
-    uint32_t offset = 0;
-    std::string replace = "attachment:2147483648";
-    for(auto &image : _images)
+    uint32_t size = 0;
+    std::string header;
+    while(true)
     {
-        std::string blockPos = std::string("attachment:") + std::to_string(size + offset);
-        size_t pos = header.find(replace, 32);
-        header.replace(pos, replace.size(), blockPos);
-        offset += image._dataBlock.data.size();
+        std::stringstream xml;
+        xml.write(signature, sizeof(signature));
+        doc.save(xml, "", pugi::format_raw);
+        header = xml.str();
+        if(size != header.size())
+        {
+            size = header.size();
+            updateImageAttachmentPos(root, size);
+        }
+        else
+        {
+            break;
+        }
     }
 
     uint32_t headerSize = header.size() - sizeof(signature);
-    header.resize(size, 0);
     header.replace(8, sizeof(uint32_t), (const char*)&headerSize, sizeof(uint32_t));
 
     _xisfHeader = ByteArray(header.c_str(), header.size());
@@ -1104,7 +1106,10 @@ void XISFWriterPrivate::writeDataBlockAttributes(pugi::xml_node &image_node, con
     }
     else
     {
-        std::string attachment = "attachment:2147483648:" + std::to_string(dataBlock.data.size());
+        std::string attachment = "attachment:";
+        if(dataBlock.attachmentPos == 0) attachment += "99999";
+        else attachment += std::to_string(dataBlock.attachmentPos);
+        attachment += ":" + std::to_string(dataBlock.data.size());
         image_node.append_attribute("location").set_value(attachment.c_str());
     }
 
@@ -1175,6 +1180,19 @@ void XISFWriterPrivate::writeMetadata(pugi::xml_node &node)
     std::tm tm = *std::gmtime(&t);
     writePropertyElement(metadata, Property("XISF:CreationTime", tm));
     writePropertyElement(metadata, Property("XISF:CreatorApplication", "LibXISF"));
+}
+
+void XISFWriterPrivate::updateImageAttachmentPos(pugi::xml_node &root, size_t offset)
+{
+    pugi::xpath_node_set imageNodes = root.select_nodes("//Image");
+    int i = 0;
+    for(auto &image : _images)
+    {
+        pugi::xml_node node = imageNodes[i++].node();
+        std::string location = "attachment:" + std::to_string(offset) + ":" + std::to_string(image._dataBlock.data.size());
+        offset += image._dataBlock.data.size();
+        node.attribute("location").set_value(location.c_str());
+    }
 }
 
 XISFReader::XISFReader()

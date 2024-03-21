@@ -179,11 +179,11 @@ void DataBlock::decompress(const ByteArray &input, const String &encoding)
             dstPtr += block.second;
         }
 
+    }
 #else
         throw Error("ZSTD support not compiled");
 #endif
         break;
-    }
     }
 
     subblocks.clear();

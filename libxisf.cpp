@@ -49,6 +49,7 @@ static std::unordered_map<Image::ColorSpace, String> colorSpaceToString;
 static DataBlock::CompressionCodec compressionCodecOverride = DataBlock::None;
 static bool byteShuffleOverride = false;
 static int compressionLevelOverride = -1;
+const size_t GiB = 1073741824;
 
 static const std::unordered_map<String, std::pair<String, Variant::Type>> fitsNameToPropertyIdTypeConvert = {
     {"OBSERVER", {"Observer:Name", Variant::Type::String}},
@@ -127,6 +128,9 @@ void DataBlock::decompress(const ByteArray &input, const String &encoding)
     else if(encoding == "base16")
         tmp.decodeHex();
 
+    if(subblocks.size() == 0)
+        subblocks.push_back({tmp.size(), uncompressedSize});
+
     switch(codec)
     {
     case None:
@@ -135,26 +139,54 @@ void DataBlock::decompress(const ByteArray &input, const String &encoding)
     case Zlib:
     {
         data.resize(uncompressedSize);
-        uLongf size = uncompressedSize;
-        ::uncompress((Bytef*)data.data(), &size, (Bytef*)tmp.data(), tmp.size());
+        const char *srcPtr = tmp.constData();
+        char *dstPtr = data.data();
+        for(auto &block : subblocks)
+        {
+            uLongf size = block.second;
+            ::uncompress((Bytef*)dstPtr, &size, (const Bytef*)srcPtr, block.first);
+            srcPtr += block.first;
+            dstPtr += block.second;
+        }
         break;
     }
     case LZ4:
     case LZ4HC:
+    {
         data.resize(uncompressedSize);
-        if(LZ4_decompress_safe(tmp.constData(), data.data(), tmp.size(), data.size()) < 0)
-            throw Error("LZ4 decompression failed");
+        const char *srcPtr = tmp.constData();
+        char *dstPtr = data.data();
+        for(auto &block : subblocks)
+        {
+            if(LZ4_decompress_safe(srcPtr, dstPtr, block.first, block.second) < 0)
+                throw Error("LZ4 decompression failed");
+            srcPtr += block.first;
+            dstPtr += block.second;
+        }
         break;
+    }
     case ZSTD:
 #ifdef HAVE_ZSTD
+    {
         data.resize(uncompressedSize);
-        if(ZSTD_isError(ZSTD_decompress(data.data(), data.size(), tmp.constData(), tmp.size())))
-            throw Error("ZSTD decompression failed");
+        const char *srcPtr = tmp.constData();
+        char *dstPtr = data.data();
+        for(auto &block : subblocks)
+        {
+            if(ZSTD_isError(ZSTD_decompress(dstPtr, block.second, srcPtr, block.first)))
+                throw Error("ZSTD decompression failed");
+            srcPtr += block.first;
+            dstPtr += block.second;
+        }
+
+    }
 #else
         throw Error("ZSTD support not compiled");
 #endif
         break;
     }
+
+    subblocks.clear();
 
     byteUnshuffle(data, byteShuffling);
     attachmentPos = 0;
@@ -181,26 +213,48 @@ void DataBlock::compress(int sampleFormatSize)
         break;
     case Zlib:
     {
-        data.resize(compressBound(uncompressedSize));
-        uLongf compressedSize = data.size();
-        if(::compress2((Bytef*)data.data(), &compressedSize, (Bytef*)tmp.data(), tmp.size(), compressLevel) != Z_OK)
-            throw Error("Zlib compression failed");
-        data.resize(compressedSize);
+        int64_t size = tmp.size();
+        int64_t compSize = 0;
+        int64_t inPtr = 0;
+        while(inPtr < size)
+        {
+            int64_t inSize = UINT32_MAX < size - inPtr ? UINT32_MAX : size - inPtr;
+            data.resize(compSize + compressBound(inSize));
+            uLongf outSize = data.size() - compSize;
+            if(::compress2((Bytef*)data.data() + compSize, &outSize, (const Bytef*)tmp.constData() + inPtr, inSize, compressLevel) != Z_OK)
+                throw Error("Zlib compression failed");
+
+            compSize += outSize;
+            inPtr += inSize;
+            subblocks.push_back({outSize, inSize});
+        }
+        data.resize(compSize);
         break;
     }
     case LZ4:
     case LZ4HC:
     {
-        int compSize = 0;
-        data.resize(LZ4_compressBound(tmp.size()));
-        if(codec == LZ4)
-            compSize = LZ4_compress_default(tmp.constData(), data.data(), tmp.size(), data.size());
-        else
-            compSize = LZ4_compress_HC(tmp.constData(), data.data(), tmp.size(), data.size(), compressLevel < 0 ? LZ4HC_CLEVEL_DEFAULT : compressLevel);
+        int64_t size = tmp.size();
+        int64_t compSize = 0;
+        int64_t inPtr = 0;
+        while(inPtr < size)
+        {
+            int64_t inSize = LZ4_MAX_INPUT_SIZE < size - inPtr ? LZ4_MAX_INPUT_SIZE : size - inPtr;
+            data.resize(compSize + LZ4_compressBound(inSize));
+            int outSize = 0;
 
-        if(compSize <= 0)
-            throw Error("LZ4 compression failed");
+            if(codec == LZ4)
+                outSize = LZ4_compress_default(tmp.constData() + inPtr, data.data() + compSize, inSize, data.size() - compSize);
+            else
+                outSize = LZ4_compress_HC(tmp.constData() + inPtr, data.data() + compSize, inSize, data.size() - compSize, compressLevel < 0 ? LZ4HC_CLEVEL_DEFAULT : compressLevel);
 
+            if(outSize <= 0)
+                throw Error("LZ4 compression failed");
+
+            compSize += outSize;
+            inPtr += inSize;
+            subblocks.push_back({outSize, inSize});
+        }
         data.resize(compSize);
         break;
     }
@@ -711,7 +765,7 @@ void XISFReaderPrivate::parseCompression(const pugi::xml_node &node, DataBlock &
         else
             throw Error("Unknown compression codec");
 
-        dataBlock.uncompressedSize = std::stoul(compression[1]);
+        dataBlock.uncompressedSize = std::stoull(compression[1]);
 
         if(compression[0].find("+sh") != std::string::npos)
         {
@@ -719,6 +773,18 @@ void XISFReaderPrivate::parseCompression(const pugi::xml_node &node, DataBlock &
                 dataBlock.byteShuffling = std::stoi(compression[2]);
             else
                 throw Error("Missing byte shuffling size");
+        }
+
+        if(node.attribute("subblocks"))
+        {
+            std::vector<std::string> subblocks = splitString(node.attribute("subblocks").as_string(), ':');
+            for(auto &block : subblocks)
+            {
+                size_t pos = 0;
+                size_t comp = std::stoull(block, &pos);
+                size_t deco = std::stoull(block.substr(pos+1));
+                dataBlock.subblocks.push_back({comp, deco});
+            }
         }
     }
 }
@@ -741,8 +807,8 @@ DataBlock XISFReaderPrivate::parseDataBlock(const pugi::xml_node &node)
     }
     else if(location.size() >= 3 && location[0] == "attachment")
     {
-        dataBlock.attachmentPos = std::stoul(location[1]);
-        dataBlock.attachmentSize = std::stoul(location[2]);
+        dataBlock.attachmentPos = std::stoull(location[1]);
+        dataBlock.attachmentSize = std::stoull(location[2]);
     }
     else
     {
@@ -818,9 +884,9 @@ Image XISFReaderPrivate::parseImage(const pugi::xml_node &node)
 
     std::vector<std::string> geometry = splitString(node.attribute("geometry").as_string(), ':');
     if(geometry.size() != 3)throw Error("We support only 2D images");
-    image._width = std::stoul(geometry[0]);
-    image._height = std::stoul(geometry[1]);
-    image._channelCount = std::stoul(geometry[2]);
+    image._width = std::stoull(geometry[0]);
+    image._height = std::stoull(geometry[1]);
+    image._channelCount = std::stoull(geometry[2]);
     if(!image._width || !image._height || !image._channelCount)throw Error("Invalid image geometry");
 
     std::vector<std::string> bounds = splitString(node.attribute("bounds").as_string(), ':');
@@ -864,7 +930,15 @@ void XISFReaderPrivate::readAttachment(DataBlock &dataBlock)
 {
     ByteArray data(dataBlock.attachmentSize);
     _io->seekg(dataBlock.attachmentPos);
-    _io->read(data.data(), dataBlock.attachmentSize);
+    size_t size = dataBlock.attachmentSize;
+    char *ptr = data.data();
+    while(size > 0)
+    {
+        size_t s = std::min(size, GiB);
+        _io->read(ptr, s);
+        size -= s;
+        ptr += s;
+    }
     dataBlock.decompress(data);
 }
 
@@ -882,6 +956,7 @@ private:
     void writePropertyElement(pugi::xml_node &node, const Property &property);
     void writeFITSKeyword(pugi::xml_node &node, const FITSKeyword &keyword);
     void writeMetadata(pugi::xml_node &node);
+    void updateImageAttachmentPos(pugi::xml_node &root, size_t offset);
     ByteArray _xisfHeader;
     ByteArray _attachmentsData;
     std::vector<Image> _images;
@@ -913,7 +988,15 @@ void XISFWriterPrivate::save(std::ostream &io)
 
     for(auto &image : _images)
     {
-        io.write(image._dataBlock.data.constData(), image._dataBlock.data.size());
+        const char *ptr = image._dataBlock.data.constData();
+        size_t size = image._dataBlock.data.size();
+        while(size > 0)
+        {
+            size_t s = std::min(size, GiB);
+            io.write(ptr, s);
+            ptr += s;
+            size -= s;
+        }
     }
 }
 
@@ -944,25 +1027,26 @@ void XISFWriterPrivate::writeHeader()
 
     writeMetadata(root);
 
-    std::stringstream xml;
-    xml.write(signature, sizeof(signature));
-    doc.save(xml, "", pugi::format_raw);
-
-    std::string header = xml.str();
-    uint32_t size = header.size();
-
-    uint32_t offset = 0;
-    std::string replace = "attachment:2147483648";
-    for(auto &image : _images)
+    uint32_t size = 0;
+    std::string header;
+    while(true)
     {
-        std::string blockPos = std::string("attachment:") + std::to_string(size + offset);
-        size_t pos = header.find(replace, 32);
-        header.replace(pos, replace.size(), blockPos);
-        offset += image._dataBlock.data.size();
+        std::stringstream xml;
+        xml.write(signature, sizeof(signature));
+        doc.save(xml, "", pugi::format_raw);
+        header = xml.str();
+        if(size != header.size())
+        {
+            size = header.size();
+            updateImageAttachmentPos(root, size);
+        }
+        else
+        {
+            break;
+        }
     }
 
     uint32_t headerSize = header.size() - sizeof(signature);
-    header.resize(size, 0);
     header.replace(8, sizeof(uint32_t), (const char*)&headerSize, sizeof(uint32_t));
 
     _xisfHeader = ByteArray(header.c_str(), header.size());
@@ -1002,7 +1086,8 @@ void XISFWriterPrivate::writeImageElement(pugi::xml_node &node, const Image &ima
     if(image._iccProfile.size())
     {
         ByteArray base64 = image._iccProfile;
-        base64.decodeBase64();
+        base64.encodeBase64();
+        base64.append('\0');
         pugi::xml_node icc_node = image_node.append_child("ICCProfile");
         icc_node.append_attribute("location").set_value("inline:base64");
         icc_node.append_child(pugi::node_pcdata).set_value(base64.data());
@@ -1021,7 +1106,10 @@ void XISFWriterPrivate::writeDataBlockAttributes(pugi::xml_node &image_node, con
     }
     else
     {
-        std::string attachment = "attachment:2147483648:" + std::to_string(dataBlock.data.size());
+        std::string attachment = "attachment:";
+        if(dataBlock.attachmentPos == 0) attachment += "99999";
+        else attachment += std::to_string(dataBlock.attachmentPos);
+        attachment += ":" + std::to_string(dataBlock.data.size());
         image_node.append_attribute("location").set_value(attachment.c_str());
     }
 
@@ -1051,6 +1139,19 @@ void XISFWriterPrivate::writeDataBlockAttributes(pugi::xml_node &image_node, con
 
         image_node.append_attribute("compression").set_value(codec.c_str());
     }
+
+    if(!dataBlock.subblocks.empty())
+    {
+        std::string subblocks;
+        for(auto i = dataBlock.subblocks.begin(); i != dataBlock.subblocks.end(); i++)
+        {
+            if(i != dataBlock.subblocks.begin())
+                subblocks += ":";
+
+            subblocks += std::to_string(i->first) + "," + std::to_string(i->second);
+        }
+        image_node.append_attribute("subblocks").set_value(subblocks.c_str());
+    }
 }
 
 void XISFWriterPrivate::writePropertyElement(pugi::xml_node &node, const Property &property)
@@ -1079,6 +1180,19 @@ void XISFWriterPrivate::writeMetadata(pugi::xml_node &node)
     std::tm tm = *std::gmtime(&t);
     writePropertyElement(metadata, Property("XISF:CreationTime", tm));
     writePropertyElement(metadata, Property("XISF:CreatorApplication", "LibXISF"));
+}
+
+void XISFWriterPrivate::updateImageAttachmentPos(pugi::xml_node &root, size_t offset)
+{
+    pugi::xpath_node_set imageNodes = root.select_nodes("//Image");
+    int i = 0;
+    for(auto &image : _images)
+    {
+        pugi::xml_node node = imageNodes[i++].node();
+        std::string location = "attachment:" + std::to_string(offset) + ":" + std::to_string(image._dataBlock.data.size());
+        offset += image._dataBlock.data.size();
+        node.attribute("location").set_value(location.c_str());
+    }
 }
 
 XISFReader::XISFReader()

@@ -180,6 +180,7 @@ struct LIBXISF_EXPORT DataBlock
     uint64_t attachmentPos = 0;
     uint64_t attachmentSize = 0;
     uint64_t uncompressedSize = 0;
+    std::vector<std::pair<uint64_t, uint64_t>> subblocks;
     CompressionCodec codec = None;
     int compressLevel = -1;
     ByteArray data;

@@ -34,6 +34,7 @@ Package: libxisf
 Architecture: any
 Multi-Arch: same
 Depends: ${shlibs:Depends}, ${misc:Depends}
+Conflicts: libxisf0
 Description: Library to load and save XISF images
  XISF is native format of PixInsight astroprocessing suite.
  Extensible Image Serialization Format (XISF) is the native file format

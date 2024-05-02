@@ -949,12 +949,12 @@ public:
     void save(ByteArray &data);
     void save(std::ostream &io);
     void writeImage(const Image &image);
+    static void writeFITSKeyword(pugi::xml_node &node, const FITSKeyword &keyword);
 private:
     void writeHeader();
     void writeImageElement(pugi::xml_node &node, const Image &image);
     void writeDataBlockAttributes(pugi::xml_node &image_node, const DataBlock &dataBlock);
     void writePropertyElement(pugi::xml_node &node, const Property &property);
-    void writeFITSKeyword(pugi::xml_node &node, const FITSKeyword &keyword);
     void writeMetadata(pugi::xml_node &node);
     void updateImageAttachmentPos(pugi::xml_node &root, size_t offset);
     ByteArray _xisfHeader;
@@ -1268,6 +1268,321 @@ void XISFWriter::save(std::ostream &io)
 void XISFWriter::writeImage(const Image &image)
 {
     p->writeImage(image);
+}
+
+class XISFModifyPrivate
+{
+public:
+    void open(const String &name);
+    void open(const ByteArray &data);
+    /** Open image from istream. This method takes ownership of *io pointer */
+    void open(std::istream *io);
+    /** Close opended file release all data. */
+    void close();
+
+    void save(const String &name);
+    void save(ByteArray &data);
+    void save(std::ostream &io);
+
+    void addFITSKeyword(uint32_t image, const FITSKeyword &keyword);
+    void updateFITSKeyword(uint32_t image, const FITSKeyword &keyword, bool add);
+    void removeFITSKeyword(u_int32_t image, const String &name);
+private:
+    void readXISFHeader();
+    void parseAttachmentPos(pugi::xml_node &root);
+    void updateAttachmentPos(pugi::xml_node &root, size_t offset);
+
+    std::unique_ptr<std::istream> _io;
+    std::unique_ptr<StreamBuffer> _buffer;
+
+    pugi::xml_document _doc;
+    pugi::xml_node _root;
+    std::map<int, std::pair<uint64_t, uint64_t>> _attachmentPos;// pair contain position and size
+    std::map<int, std::pair<uint64_t, uint64_t>> _attachmentPosNew;
+};
+
+
+void XISFModifyPrivate::open(const String &name)
+{
+    close();
+    _io = std::make_unique<std::ifstream>(name.c_str(), std::ios_base::in | std::ios_base::binary);
+    readXISFHeader();
+}
+
+void XISFModifyPrivate::open(const ByteArray &data)
+{
+    close();
+    _buffer = std::make_unique<StreamBuffer>(data);
+    _io = std::make_unique<std::istream>(_buffer.get());
+    readXISFHeader();
+}
+
+void XISFModifyPrivate::open(std::istream *io)
+{
+    close();
+    _io.reset(io);
+    readXISFHeader();
+}
+
+void XISFModifyPrivate::close()
+{
+    _io.reset();
+    _buffer.reset();
+    _root = pugi::xml_node();
+    _doc.reset();
+}
+
+void XISFModifyPrivate::save(const String &name)
+{
+    std::ofstream fw(name.c_str(), std::ios_base::out | std::ios_base::binary);
+
+    if(fw.fail())
+        throw Error("Failed to open file");
+
+    save(fw);
+}
+
+void XISFModifyPrivate::save(ByteArray &data)
+{
+    StreamBuffer buffer;
+    std::ostream oss(&buffer);
+    save(oss);
+    data = buffer.byteArray();
+}
+
+void XISFModifyPrivate::save(std::ostream &io)
+{
+    if(!_io || !_root)
+        throw Error("No input file opened");
+
+    const char signature[16] = {'X', 'I', 'S', 'F', '0', '1', '0', '0', 0, 0, 0, 0, 0, 0, 0, 0};
+
+    pugi::xml_document doc;
+    doc.append_child(pugi::node_comment).set_value("\nExtensible Image Serialization Format - XISF version 1.0\nCreated with libXISF - https://nouspiro.space\n");
+    pugi::xml_node root_copy = doc.append_copy(_root);
+
+    uint32_t size = 0;
+    std::string header;
+    while(true)
+    {
+        std::stringstream xml;
+        xml.write(signature, sizeof(signature));
+        doc.save(xml, "", pugi::format_raw);
+        header = xml.str();
+        if(size != header.size())
+        {
+            size = header.size();
+            updateAttachmentPos(root_copy, size);
+        }
+        else
+        {
+            break;
+        }
+    }
+
+    uint32_t headerSize = header.size() - sizeof(signature);
+    header.replace(8, sizeof(uint32_t), (const char*)&headerSize, sizeof(uint32_t));
+
+    io.write(header.c_str(), header.size());
+    const uint64_t BLOCK_SIZE = 1024*1024*4;
+    std::vector<char> data(BLOCK_SIZE);
+    for(auto &pos : _attachmentPos)
+    {
+        uint64_t oldPos = pos.second.first;
+        uint64_t size = pos.second.second;
+
+        _io->seekg(oldPos);
+        while(size)
+        {
+            _io->read(&data[0], std::min(size, BLOCK_SIZE));
+            io.write(&data[0], std::min(size, BLOCK_SIZE));
+            size -= std::min(size, BLOCK_SIZE);
+        }
+    }
+}
+
+void XISFModifyPrivate::addFITSKeyword(uint32_t image, const FITSKeyword &keyword)
+{
+    if(!_root)
+        throw Error("No input file opened");
+
+    pugi::xpath_node_set images = _root.select_nodes("//Image");
+
+    if(image >= images.size())
+        throw Error("Out of bounds");
+
+    pugi::xml_node imageNode = images[image].node();
+    XISFWriterPrivate::writeFITSKeyword(imageNode, keyword);
+}
+
+void XISFModifyPrivate::updateFITSKeyword(uint32_t image, const FITSKeyword &keyword, bool add)
+{
+    if(!_root)
+        throw Error("No input file opened");
+
+    pugi::xpath_node_set images = _root.select_nodes("//Image");
+
+    if(image >= images.size())
+        throw Error("Out of bounds");
+
+    pugi::xpath_variable_set variables;
+    variables.set("name", keyword.name.c_str());
+    pugi::xml_node imageNode = images[image].node();
+    pugi::xml_node keywordNode = imageNode.select_node("FITSKeyword[@name=string($name)]", &variables).node();
+
+    if(keywordNode)
+    {
+        if(keywordNode.attribute("value"))
+            keywordNode.attribute("value").set_value(keyword.value.c_str());
+        else
+            keywordNode.append_attribute("value").set_value(keyword.value.c_str());
+
+        if(keywordNode.attribute("comment"))
+            keywordNode.attribute("comment").set_value(keyword.comment.c_str());
+        else
+            keywordNode.append_attribute("comment").set_value(keyword.comment.c_str());
+    }
+    else if(add)
+    {
+        XISFWriterPrivate::writeFITSKeyword(imageNode, keyword);
+    }
+}
+
+void XISFModifyPrivate::removeFITSKeyword(u_int32_t image, const String &name)
+{
+    if(!_root)
+        throw Error("No input file opened");
+
+    pugi::xpath_node_set images = _root.select_nodes("//Image");
+
+    if(image >= images.size())
+        throw Error("Out of bounds");
+
+    pugi::xpath_variable_set variables;
+    variables.set("name", name.c_str());
+    pugi::xml_node imageNode = images[image].node();
+    pugi::xml_node keywordNode = imageNode.select_node("FITSKeyword[@name=string($name)]", &variables).node();
+
+    if(keywordNode)
+        imageNode.remove_child(keywordNode);
+}
+
+void XISFModifyPrivate::readXISFHeader()
+{
+    char signature[8];
+    _io->read(signature, sizeof(signature));
+    if(_io->fail())
+        throw Error("Failed to read from file");
+
+    if(memcmp(signature, "XISF0100", sizeof(signature)) != 0)
+        throw Error("Not valid XISF 1.0 file");
+
+    uint32_t headerLen[2] = {0};
+    _io->read((char*)&headerLen, sizeof(headerLen));
+
+    ByteArray xisfHeader(headerLen[0]);
+    _io->read(xisfHeader.data(), headerLen[0]);
+
+    _doc.load_buffer(xisfHeader.data(), xisfHeader.size());
+
+    _root = _doc.child("xisf");
+
+    parseAttachmentPos(_root);
+
+    if(!_root || _root.attribute("version").as_string() != std::string("1.0"))
+        throw Error("Unknown root XML element");
+}
+
+void XISFModifyPrivate::parseAttachmentPos(pugi::xml_node &root)
+{
+    pugi::xpath_node_set locationAttributes = root.select_nodes("//@location");
+    int i = 0;
+    for(auto &attr : locationAttributes)
+    {
+        std::string locationStr = attr.attribute().as_string();
+        std::vector<std::string> location = splitString(locationStr, ':');
+        if(location.size() >= 3 && location[0] == "attachment")
+        {
+            uint64_t attachmentPos = std::stoull(location[1]);
+            uint64_t attachmentSize = std::stoull(location[2]);
+            _attachmentPos[i] = {attachmentPos, attachmentSize};
+        }
+        i++;
+    }
+}
+
+void XISFModifyPrivate::updateAttachmentPos(pugi::xml_node &root, size_t offset)
+{
+    pugi::xpath_node_set locationAttributes = root.select_nodes("//@location");
+    for(auto &pos : _attachmentPos)
+    {
+        pugi::xml_attribute attr = locationAttributes[pos.first].attribute();
+        uint64_t attachmentSize = pos.second.second;
+        std::string locationStr = "attachment:" + std::to_string(offset) + ":" + std::to_string(attachmentSize);
+        _attachmentPosNew[pos.first] = pos.second;
+        offset += attachmentSize;
+        attr.set_value(locationStr.c_str());
+    }
+}
+
+XISFModify::XISFModify()
+{
+    p = new XISFModifyPrivate();
+}
+
+XISFModify::~XISFModify()
+{
+    delete p;
+}
+
+void XISFModify::open(const String &name)
+{
+    p->open(name);
+}
+
+void XISFModify::open(const ByteArray &data)
+{
+    p->open(data);
+}
+
+void XISFModify::open(std::istream *io)
+{
+    p->open(io);
+}
+
+void XISFModify::close()
+{
+    p->close();
+}
+
+void XISFModify::save(const String &name)
+{
+    p->save(name);
+}
+
+void XISFModify::save(ByteArray &data)
+{
+    p->save(data);
+}
+
+void XISFModify::save(std::ostream &io)
+{
+    p->save(io);
+}
+
+void XISFModify::addFITSKeyword(uint32_t image, const FITSKeyword &keyword)
+{
+    p->addFITSKeyword(image, keyword);
+}
+
+void XISFModify::updateFITSKeyword(uint32_t image, const FITSKeyword &keyword, bool add)
+{
+    p->updateFITSKeyword(image, keyword, add);
+}
+
+void XISFModify::removeFITSKeyword(uint32_t image, const String &name)
+{
+    p->removeFITSKeyword(image, name);
 }
 
 #define STRING_ENUM(map, map2, c, e) { map.insert({#e, c::e}); map2.insert({c::e, #e}); }

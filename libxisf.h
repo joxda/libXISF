@@ -35,6 +35,7 @@ namespace LibXISF
 
 class XISFReaderPrivate;
 class XISFWriterPrivate;
+class XISFModifyPrivate;
 
 class LIBXISF_EXPORT ByteArray
 {
@@ -403,6 +404,42 @@ public:
     explicit Error(const char *msg) : Error(std::string(msg)) {}
     explicit Error(const std::string &msg) : std::exception(), _msg(msg) {}
     const char* what() const noexcept { return _msg.c_str(); }
+};
+
+class LIBXISF_EXPORT XISFModify
+{
+public:
+    XISFModify();
+    virtual ~XISFModify();
+    void open(const String &name);
+    void open(const ByteArray &data);
+    void open(std::istream *io);
+    void close();
+    void save(const String &name);
+    void save(ByteArray &data);
+    void save(std::ostream &io);
+
+    /**
+     * @brief addFITSKeyword append new keyword to image
+     * @param image index of image to update
+     * @param keyword that will be added
+     */
+    void addFITSKeyword(uint32_t image, const FITSKeyword &keyword);
+    /**
+     * @brief updateFITSKeyword update keyword with same name
+     * @param image index of image to update
+     * @param keyword that will be updated
+     * @param add if true then it will add new keyword in case that it doesn't exists
+     */
+    void updateFITSKeyword(uint32_t image, const FITSKeyword &keyword, bool add);
+    /**
+     * @brief removeFITSKeyword remove keyword with name from image
+     * @param image index of image to update
+     * @param name of keyword that will be removed
+     */
+    void removeFITSKeyword(uint32_t image, const String &name);
+private:
+    XISFModifyPrivate *p;
 };
 
 template<typename T>

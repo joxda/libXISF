@@ -1286,7 +1286,7 @@ public:
 
     void addFITSKeyword(uint32_t image, const FITSKeyword &keyword);
     void updateFITSKeyword(uint32_t image, const FITSKeyword &keyword, bool add);
-    void removeFITSKeyword(u_int32_t image, const String &name);
+    void removeFITSKeyword(uint32_t image, const String &name);
 private:
     void readXISFHeader();
     void parseAttachmentPos(pugi::xml_node &root);
@@ -1448,7 +1448,7 @@ void XISFModifyPrivate::updateFITSKeyword(uint32_t image, const FITSKeyword &key
     }
 }
 
-void XISFModifyPrivate::removeFITSKeyword(u_int32_t image, const String &name)
+void XISFModifyPrivate::removeFITSKeyword(uint32_t image, const String &name)
 {
     if(!_root)
         throw Error("No input file opened");

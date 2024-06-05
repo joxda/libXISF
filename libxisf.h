@@ -317,6 +317,11 @@ public:
     const T* imageData() const { return static_cast<T*>(imageData()); }
     size_t imageDataSize() const;
     DataBlock::CompressionCodec compression() const;
+    /** Set compression type and level.
+     *  @param compression define which compression algorithm to use.
+     *  @param level number between 0 and 100. Zero means lowest compression and maximum speed. Hundred means maximum compression speed.
+     *  -1 means default compression level defined by compression library.
+     */
     void setCompression(DataBlock::CompressionCodec compression, int level = -1);
     bool byteShuffling() const;
     void setByteshuffling(bool enable);

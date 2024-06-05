@@ -23,6 +23,7 @@
 #include <iostream>
 #include <sstream>
 #include <cstdlib>
+#include <cmath>
 #include <lz4.h>
 #include <lz4hc.h>
 #include <pugixml.hpp>
@@ -486,7 +487,38 @@ DataBlock::CompressionCodec Image::compression() const
 void Image::setCompression(DataBlock::CompressionCodec compression, int level)
 {
     _dataBlock.codec = compression;
-    _dataBlock.compressLevel = level;
+    _dataBlock.compressLevel = -1;
+
+    level = std::min(std::max(level, -1), 100);
+
+    auto percentToRange = [](int val, int min, int max)
+    {
+        double slope = (max - min) / 100.0;
+        return std::round(min + slope * val);
+    };
+
+    if(level >= 0)
+    {
+        switch(compression)
+        {
+        case DataBlock::CompressionCodec::Zlib:
+            _dataBlock.compressLevel = percentToRange(level, Z_BEST_SPEED, Z_BEST_COMPRESSION);
+            break;
+        case DataBlock::CompressionCodec::LZ4:
+        case DataBlock::CompressionCodec::LZ4HC:
+            _dataBlock.compressLevel = percentToRange(level, 1, LZ4HC_CLEVEL_MAX);
+            break;
+        case DataBlock::CompressionCodec::ZSTD:
+#ifdef HAVE_ZSTD
+            _dataBlock.compressLevel = percentToRange(level, ZSTD_minCLevel(), ZSTD_maxCLevel());
+#endif
+            break;
+        default:
+            //nothing
+            break;
+        }
+    }
+
 }
 
 bool Image::byteShuffling() const

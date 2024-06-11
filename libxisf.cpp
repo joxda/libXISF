@@ -510,7 +510,7 @@ void Image::setCompression(DataBlock::CompressionCodec compression, int level)
             break;
         case DataBlock::CompressionCodec::ZSTD:
 #ifdef HAVE_ZSTD
-            _dataBlock.compressLevel = percentToRange(level, ZSTD_minCLevel(), ZSTD_maxCLevel());
+            _dataBlock.compressLevel = percentToRange(level, 0, ZSTD_maxCLevel());
 #endif
             break;
         default:
@@ -518,7 +518,6 @@ void Image::setCompression(DataBlock::CompressionCodec compression, int level)
             break;
         }
     }
-
 }
 
 bool Image::byteShuffling() const

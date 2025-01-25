@@ -1,6 +1,6 @@
 /************************************************************************
  * LibXISF - library to load and save XISF files                        *
- * Copyright (C) 2023 Dušan Poizl                                       *
+ * Copyright (C) 2025 Dušan Poizl                                       *
  *                                                                      *
  * This program is free software: you can redistribute it and/or modify *
  * it under the terms of the GNU General Public License as published by *
@@ -78,6 +78,22 @@ int main(int argc, char **argv)
             TEST(image.imageProperties().size() != img0.imageProperties().size(), "Property count doesn't match");
             TEST(std::memcmp(image.imageData(), img0.imageData(), image.imageDataSize()), "Images doesn't match");
             TEST(std::memcmp(image.imageData(), img1.imageData(), image.imageDataSize()), "Images doesn't match");
+
+            XISFModify mod;
+            mod.open(data);
+            mod.addFITSKeyword(0, {"NEWKEY", "1.0", ""});
+            mod.updateFITSKeyword(0, {"OBJECT", "M42", ""}, true);
+
+            ByteArray data2;
+            mod.save(data2);
+            reader.open(data2);
+            const Image &imgMod = reader.getImage(0, false);
+            auto fitsKeywords = imgMod.fitsKeywords();
+            TEST(fitsKeywords.size() != 4, "FITS keyword were not added");
+            TEST(fitsKeywords[0].name != "RA", "Incorrect FITS RA keyword");
+            TEST(fitsKeywords[1].name != "DEC", "Incorrect FITS DEC keyword");
+            TEST(fitsKeywords[2].name != "NEWKEY", "Incorrect FITS NEWKEY keyword");
+            TEST(fitsKeywords[3].name != "OBJECT", "Incorrect FITS OBJECT keyword");
         }
         else if(argc == 2 && std::strcmp(argv[1], "bench") == 0)
         {

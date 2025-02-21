@@ -1,3 +1,5 @@
+This is a mirror of https://gitea.nouspiro.space/nou/libXISF/
+
 LibXISF
 =========
 

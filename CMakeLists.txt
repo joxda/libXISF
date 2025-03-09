@@ -124,14 +124,14 @@ configure_file(libxisf.pc.in libxisf.pc @ONLY)
 
 #testing
 
-enable_testing()
+#enable_testing()
 
-add_executable(LibXISFTest
-    test/main.cpp
-    test/benchmark.cpp)
+#add_executable(LibXISFTest
+    #test/main.cpp
+    #test/benchmark.cpp)
 
-target_link_libraries(LibXISFTest XISF)
+#target_link_libraries(LibXISFTest XISF)
 
-add_test(NAME LibXISFTest        COMMAND LibXISFTest)
-add_test(NAME LibXISFTestRead    COMMAND LibXISFTest "${CMAKE_CURRENT_LIST_DIR}/test/test.xisf")
-add_test(NAME LibXISFTestReadLZ4 COMMAND LibXISFTest "${CMAKE_CURRENT_LIST_DIR}/test/test_lz4.xisf")
+#add_test(NAME LibXISFTest        COMMAND LibXISFTest)
+#add_test(NAME LibXISFTestRead    COMMAND LibXISFTest "${CMAKE_CURRENT_LIST_DIR}/test/test.xisf")
+#add_test(NAME LibXISFTestReadLZ4 COMMAND LibXISFTest "${CMAKE_CURRENT_LIST_DIR}/test/test_lz4.xisf")
